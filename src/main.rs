@@ -26,27 +26,31 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(Name::new("Prefab"));
     commands.spawn(Camera2dBundle::default());
 
+   // commands.spawn(Fuck {
+    //    sprite: SpriteBundle {
+    //             sprite: Sprite {
+    //          color: Color::BLACK,
+    //          flip_x: false,h
+    //          flip_y: false,
+    //          custom_size: Some(Vec2::new(30.0, 30.0)),
+    //          rect: Some(Rect {
+    //              min: Vec2::new(30.0, 30.0),
+    //              max: Vec2::new(30.0, 30.0),
+    //          }),
+    //          anchor: bevy::sprite::Anchor::Center,
+    //      },
+    //      ..default()
+    //  },
+    //  gg: GG {},
+    // });
+    
     commands.spawn(Fuck {
-        sprite: SpriteBundle {
-            sprite: Sprite {
-                color: Color::BLACK,
-                flip_x: false,
-                flip_y: false,
-                custom_size: Some(Vec2::new(30.0, 30.0)),
-                rect: Some(Rect {
-                    min: Vec2::new(30.0, 30.0),
-                    max: Vec2::new(30.0, 30.0),
-                }),
-                anchor: bevy::sprite::Anchor::Center,
-            },
-            ..default()
-        },
-        gg: GG {},
+    sprite: SpriteBundle {
+        texture: asset_server.load("greentank_rechts.png"),
+        ..default()
+    },
+    gg: GG {},
     });
-    //commands.spawn(SpriteBundle {
-    //    texture: asset_server.load("gg.png"),
-    //    ..default()
-    //});
 }
 
 fn handle_keypress(mut query: Query<(&GG, &mut Transform)>, keys: Res<ButtonInput<KeyCode>>) {
@@ -56,6 +60,12 @@ fn handle_keypress(mut query: Query<(&GG, &mut Transform)>, keys: Res<ButtonInpu
         }
         if keys.pressed(KeyCode::ArrowLeft) {
             transform.translation.x -= 10.0;
+        }
+        if keys.pressed(KeyCode::ArrowUp) {
+            transform.translation.y += 10.0;
+        }
+        if keys.pressed(KeyCode::ArrowDown) {
+            transform.translation.y -= 10.0;
         }
     }
 }
