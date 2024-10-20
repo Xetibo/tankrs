@@ -10,4 +10,4 @@ required-features = ["bevy_xpbd_3d"]
 
 [dependencies]
 bevy = { version = "0.14.2", features = ["wayland"] }
-space_editor = { git = "https://github.com/rewin123/space_editor.git" }
+rand = "0.8.5"
