@@ -1,15 +1,17 @@
 use bevy::{
     asset::Assets,
     color::Color,
-    math::{Quat, Rect, Vec2, Vec3},
+    math::{Quat, Vec2, Vec3},
     prelude::{default, Bundle, Circle, Commands, Component, Mesh, ResMut, Transform},
     sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle},
 };
 
+use crate::tank::Angle;
+
 #[derive(Component)]
 pub struct Bullet {
     pub velocity: Vec2,
-    pub direction: Vec2,
+    pub direction: Angle,
 }
 
 #[derive(Bundle)]
@@ -22,12 +24,12 @@ pub const NORMAL_BULLET: fn(
     &mut ResMut<Assets<Mesh>>,
     &mut ResMut<Assets<ColorMaterial>>,
     &mut Commands,
-    &Vec2,
+    &Angle,
     &Vec2,
 ) = |meshes: &mut ResMut<Assets<Mesh>>,
      materials: &mut ResMut<Assets<ColorMaterial>>,
      commands: &mut Commands,
-     direction: &Vec2,
+     direction: &Angle,
      velocity: &Vec2| {
     commands.spawn(BulletBundle {
         bullet: Bullet {
