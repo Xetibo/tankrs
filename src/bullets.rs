@@ -9,6 +9,9 @@ use bevy::{
 use crate::tank::Angle;
 
 #[derive(Component)]
+pub struct BulletCollider {}
+
+#[derive(Component)]
 pub struct Bullet {
     pub velocity: Vec2,
     pub direction: Angle,
@@ -26,11 +29,18 @@ pub const NORMAL_BULLET: fn(
     &mut Commands,
     &Angle,
     &Vec2,
+    &Vec3,
 ) = |meshes: &mut ResMut<Assets<Mesh>>,
      materials: &mut ResMut<Assets<ColorMaterial>>,
      commands: &mut Commands,
      direction: &Angle,
-     velocity: &Vec2| {
+     velocity: &Vec2,
+     origin: &Vec3| {
+    let offset_origin = Vec3 {
+        x: origin.x,
+        y: origin.y + 20.0,
+        z: 0.0,
+    };
     commands.spawn(BulletBundle {
         bullet: Bullet {
             velocity: *velocity,
@@ -40,11 +50,7 @@ pub const NORMAL_BULLET: fn(
             mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
             material: materials.add(Color::BLACK),
             transform: Transform {
-                translation: Vec3 {
-                    x: 100.0,
-                    y: 100.0,
-                    z: 0.0,
-                },
+                translation: offset_origin,
                 rotation: Quat::IDENTITY,
                 scale: Vec3 {
                     x: 10.0,

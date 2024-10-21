@@ -11,13 +11,13 @@ pub struct Angle {
 
 impl Default for Angle {
     fn default() -> Self {
-        Angle { value: 90.0 }
+        Angle { value: 1.5 }
     }
 }
 
 impl Angle {
     fn check(value: f32) -> bool {
-        if value >= 0.0 && value <= 180.0 {
+        if value >= 0.0 && value <= std::f32::consts::PI {
             true
         } else {
             false
@@ -53,6 +53,7 @@ pub struct Tank {
     pub blocked_direction: Vec2,
     pub shooting_direction: Angle,
     pub shooting_velocity: Vec2,
+    pub(crate) scale: bevy::prelude::Vec3,
 }
 
 #[derive(Bundle)]

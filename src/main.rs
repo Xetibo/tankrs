@@ -11,6 +11,7 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
+        .add_systems(Update, bullet_collision)
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .run();
@@ -33,6 +34,11 @@ fn setup(
         },
         tank: Tank {
             blocked_direction: Vec2::default(),
+            scale: Vec3 {
+                x: 300.0,
+                y: 30.0,
+                z: 0.0,
+            },
             // top right
             shooting_direction: tank::Angle::default(),
             shooting_velocity: Vec2::new(100.0, 600.0),
@@ -92,11 +98,11 @@ fn handle_keypress(
         // x 0.0 y 1.0
         // x -1.0 y 0.0
         let current = tank.shooting_direction.get();
-        if keys.pressed(KeyCode::KeyA) {
-            tank.shooting_direction.set(current - 2.0);
-        }
         if keys.pressed(KeyCode::KeyD) {
-            tank.shooting_direction.set(current + 2.0);
+            tank.shooting_direction.set(current - 0.01);
+        }
+        if keys.pressed(KeyCode::KeyA) {
+            tank.shooting_direction.set(current + 0.01);
         }
         if keys.pressed(KeyCode::Space) {
             (NORMAL_BULLET)(
@@ -105,6 +111,7 @@ fn handle_keypress(
                 &mut commands,
                 &tank.shooting_direction,
                 &tank.shooting_velocity,
+                &transform.translation,
             );
         }
     }
@@ -113,7 +120,7 @@ fn handle_keypress(
 fn move_bullets(time: Res<Time>, mut query: Query<(&mut Bullet, &mut Transform)>) {
     for (mut bullet, mut transform) in &mut query {
         // TODO move this away from here -> calculated every frame for no reason
-        let direction = bullet.direction.get() * std::f32::consts::PI / 180.0;
+        let direction = bullet.direction.get();
         let direction_y = direction.sin();
         let direction_x = direction.cos();
 
@@ -153,6 +160,33 @@ fn collision_handler(
             let min_y = wall_y + wall_size / 2.0 + tank_size;
 
             tank.blocked_direction.y = min_y;
+        }
+    }
+}
+
+fn bullet_collision(
+    mut commands: Commands,
+    bullets: Query<(Entity, &mut Bullet, &Transform)>,
+    walls: Query<(&Wall, &Transform)>,
+    tanks: Query<(Entity, &Tank, &Transform)>,
+) {
+    for (entity, _, bullet_transform) in &bullets {
+        for (_, wall_transform) in &walls {
+            if bullet_transform.translation.y < wall_transform.translation.y {
+                commands.entity(entity).despawn_recursive();
+            }
+        }
+        for (tank_entity, tank, tank_transform) in &tanks {
+            if bullet_transform.translation.y <= tank_transform.translation.y + (tank.scale.y / 2.0)
+                && bullet_transform.translation.y
+                    >= tank_transform.translation.y - (tank.scale.y / 2.0)
+                && bullet_transform.translation.x
+                    <= tank_transform.translation.x + (tank.scale.x / 2.0)
+                && bullet_transform.translation.x
+                    >= tank_transform.translation.x - (tank.scale.x / 2.0)
+            {
+                commands.entity(tank_entity).despawn_recursive();
+            }
         }
     }
 }
