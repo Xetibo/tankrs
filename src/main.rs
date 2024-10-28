@@ -11,22 +11,37 @@ use bevy::{
     },
     sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
 };
+use bevy_iced::iced::widget::text;
+use bevy_iced::{IcedContext, IcedPlugin};
 use bullets::{Bullet, NORMAL_BULLET};
 use tank::{Tank, TankBundle};
 
 pub mod bullets;
 pub mod tank;
 
+#[derive(Event)]
+pub enum UiMessage {}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(IcedPlugin::default())
+        .add_event::<UiMessage>()
         .add_systems(Startup, setup)
+        .add_systems(Update, ui_system)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
         .add_systems(Update, bullet_collision)
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .run();
+}
+
+fn ui_system(time: Res<Time>, mut ctx: IcedContext<UiMessage>) {
+    ctx.display(text(format!(
+        "Hello Iced! Running for {:.2} seconds.",
+        time.elapsed_seconds()
+    )));
 }
 
 #[derive(Component)]
