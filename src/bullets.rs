@@ -1,7 +1,7 @@
 use bevy::{
     asset::Assets,
     color::Color,
-    math::{Quat, Vec2, Vec3},
+    math::{Vec2, Vec3},
     prelude::{default, Bundle, Circle, Commands, Component, Mesh, ResMut, Transform},
     sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle},
 };
@@ -13,7 +13,8 @@ pub struct BulletCollider {}
 
 #[derive(Component)]
 pub struct Bullet {
-    pub velocity: Vec2,
+    pub velocity_shot: Vec2,
+    pub velocity_gravity: Vec2,
     pub direction: Angle,
 }
 
@@ -43,7 +44,8 @@ pub const NORMAL_BULLET: fn(
     };
     commands.spawn(BulletBundle {
         bullet: Bullet {
-            velocity: *velocity,
+            velocity_shot: *velocity,
+            velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
             direction: *direction,
         },
         mesh_bundle: MaterialMesh2dBundle {
@@ -51,12 +53,12 @@ pub const NORMAL_BULLET: fn(
             material: materials.add(Color::BLACK),
             transform: Transform {
                 translation: offset_origin,
-                rotation: Quat::IDENTITY,
                 scale: Vec3 {
                     x: 10.0,
                     y: 10.0,
                     z: 1.0,
                 },
+                ..default()
             },
             ..default()
         },
