@@ -36,6 +36,10 @@
               vulkan-headers
             ];
             nativeBuildInputs = with pkgs; [
+              rustc
+              rust-analyzer
+              rustfmt
+              clippy
               wayland
               rust-analyzer
               rustfmt

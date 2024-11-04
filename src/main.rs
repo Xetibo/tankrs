@@ -10,17 +10,36 @@ use bevy::{
         render_asset::RenderAssetUsages,
     },
     sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
+    utils::HashMap,
 };
-use bevy_iced::iced::widget::text;
-use bevy_iced::{IcedContext, IcedPlugin};
-use bullets::{Bullet, NORMAL_BULLET};
+//use bevy_iced::iced::widget::{, container, row, text};
+//use bevy_iced::iced::widget::{button};
+
+use bevy_iced::{
+    iced::{
+        widget::{button, row, text},
+        Theme,
+    },
+    IcedContext, IcedPlugin, Renderer,
+};
+use bullets::{Bullet, BulletType, NORMAL_BULLET};
+use inputs::{handle_keypress, KeyMap};
+//use oxiced::widgets::{
+//    oxi_button::{button, ButtonVariant},
+//    oxi_text::text,
+//};
 use tank::{Tank, TankBundle};
+use utils::{polynomial, Player};
 
 pub mod bullets;
+pub mod inputs;
 pub mod tank;
+pub mod utils;
 
-#[derive(Event)]
-pub enum UiMessage {}
+#[derive(Event, Clone)]
+pub enum UiMessage {
+    Reset,
+}
 
 fn main() {
     App::new()
@@ -34,14 +53,45 @@ fn main() {
         .add_systems(Update, bullet_collision)
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
+        .add_systems(Update, update_ui)
         .run();
 }
 
 fn ui_system(time: Res<Time>, mut ctx: IcedContext<UiMessage>) {
-    ctx.display(text(format!(
-        "Hello Iced! Running for {:.2} seconds.",
-        time.elapsed_seconds()
-    )));
+    ctx.display(row![
+        //text(format!(
+        //    "Hello Iced! Running for {:.2} seconds.",
+        //    time.elapsed_seconds()
+        //)),
+        //button(text("Reset")).on_press(UiMessage::Reset)
+        button(text(format!("Reset"))).on_press(UiMessage::Reset)
+    ]);
+}
+
+/// help text
+fn update_ui(
+    asset_server: Res<AssetServer>,
+    mut messages: EventReader<UiMessage>,
+    mut commands: Commands,
+    query: Query<(Entity, &Player, &Tank)>,
+) {
+    for msg in messages.read() {
+        match msg {
+            UiMessage::Reset => {
+                for (entity, player, tank) in query.iter() {
+                    commands.entity(entity).despawn_recursive();
+                    commands.spawn(TankBundle {
+                        sprite: SpriteBundle {
+                            texture: asset_server.load("greentank_rechts.png"),
+                            ..default()
+                        },
+                        player: player.clone(),
+                        tank: tank.clone(),
+                    });
+                }
+            }
+        }
+    }
 }
 
 #[derive(Component)]
@@ -59,7 +109,6 @@ fn setup(
     let mut i = -1920;
     //for _ in -1000..1000 {
     for x in -1920..1920 {
-        println!("{} {}", i, polynomial(x, rand));
         vertices.push([i as f32, 0.0, 0.0]);
         let two = [i as f32, polynomial(i, rand), 0.0];
         let three = [(i + 1) as f32, 0.0, 0.0];
@@ -121,6 +170,13 @@ fn setup(
             shooting_direction: tank::Angle::default(),
             shooting_velocity: Vec2::new(100.0, 600.0),
         },
+        player: Player {
+            inventory: BulletType::init_bullets(),
+            health: 100,
+            fuel: 100,
+            key_map: KeyMap::default_keymap(),
+            selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+        },
     });
 
     commands.spawn((
@@ -162,54 +218,6 @@ fn setup(
     //    Wall {},
     //));
     //generate_terrain(materials, meshes, commands);
-}
-
-fn handle_keypress(
-    mut query: Query<(&mut Tank, &mut Transform, &mut Sprite)>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    for (mut tank, mut transform, mut sprite) in &mut query {
-        if keys.pressed(KeyCode::ArrowRight) {
-            transform.translation.x += 10.0;
-            sprite.flip_x = false;
-        }
-        if keys.pressed(KeyCode::ArrowLeft) {
-            transform.translation.x -= 10.0;
-            sprite.flip_x = true;
-        }
-        if keys.pressed(KeyCode::ArrowUp) {
-            transform.translation.y =
-                (transform.translation.y + 10.0).clamp(tank.blocked_direction.y, 1000.0);
-        }
-        if keys.pressed(KeyCode::ArrowDown) {
-            transform.translation.y =
-                (transform.translation.y - 10.0).clamp(tank.blocked_direction.y, 1000.0);
-        }
-
-        // x 1.0 y 0.0
-        // x 0.0 y 1.0
-        // x -1.0 y 0.0
-        let current = tank.shooting_direction.get();
-        if keys.pressed(KeyCode::KeyD) {
-            tank.shooting_direction.set(current - 0.01);
-        }
-        if keys.pressed(KeyCode::KeyA) {
-            tank.shooting_direction.set(current + 0.01);
-        }
-        if keys.pressed(KeyCode::Space) {
-            (NORMAL_BULLET)(
-                &mut meshes,
-                &mut materials,
-                &mut commands,
-                &tank.shooting_direction,
-                &tank.shooting_velocity,
-                &transform.translation,
-            );
-        }
-    }
 }
 
 fn move_bullets(time: Res<Time>, mut query: Query<(&mut Bullet, &mut Transform)>) {
@@ -290,47 +298,3 @@ fn bullet_collision(
         }
     }
 }
-
-fn polynomial(x: i32, rand: f32) -> f32 {
-    let x = x as f32;
-    //(f32::consts::E - x) * (x * f32::consts::E) *
-    //(rand * power(x, 4)) + (rand * power(x, 3)) - (rand * power(x, 2)) - (rand * x)
-    //power(x, 5) - power(x, 4) - (5.0 * power(x, 3)) + (3.0 * power(x, 2)) + (4.0 * x) - 3.0
-    //((rand * x) * 0.00005).cos() * 1000.0 * rand
-    (x * rand * 0.005).cos() * 100. * rand + 100.0
-}
-
-fn power(num: f32, pow: i32) -> f32 {
-    if pow > 0 {
-        power(num, pow - 1)
-    } else {
-        1.0
-    }
-}
-
-//fn generate_terrain(
-//    mut materials: ResMut<Assets<StandardMaterial>>,
-//    mut meshes: ResMut<Assets<Mesh>>,
-//    mut commands: Commands,
-//) {
-//    //let mut initial = generate_random(5, 10);
-//    //for i in 0..10 {
-//    //    let shape = Mesh2dHandle(meshes.add(Triangle2d::new(
-//    //        Vec2::Y * 10.0 * initial as f32,
-//    //        Vec2::new(-50.0, -50.0),
-//    //        Vec2::new(50.0, -50.0),
-//    //    )));
-//    //    commands.spawn(MaterialMesh2dBundle {
-//    //        mesh: shape,
-//    //        material: materials.add(Color::BLACK),
-//    //        transform: Transform::from_xyz(
-//    //            // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
-//    //            i as f32 * 100.0,
-//    //            0.0,
-//    //            0.0,
-//    //        ),
-//    //        ..default()
-//    //    });
-//    //    initial = generate_random(initial - 2, initial + 2);
-//    //}
-//}

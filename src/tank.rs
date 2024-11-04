@@ -4,6 +4,8 @@ use bevy::{
     sprite::SpriteBundle,
 };
 
+use crate::utils::Player;
+
 #[derive(Clone, Copy)]
 pub struct Angle {
     value: f32,
@@ -48,7 +50,7 @@ impl Angle {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Tank {
     pub blocked_direction: Vec2,
     pub shooting_direction: Angle,
@@ -59,5 +61,6 @@ pub struct Tank {
 #[derive(Bundle)]
 pub struct TankBundle {
     pub sprite: SpriteBundle,
+    pub player: Player,
     pub tank: Tank,
 }
