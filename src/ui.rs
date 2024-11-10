@@ -17,7 +17,7 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, EndTurnEvent, Player, ResetEvent},
+    utils::{get_current_player_props, GameState, Player, ResetEvent},
     UiMessage,
 };
 
@@ -43,20 +43,33 @@ pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMes
     }
 }
 
-/// help text
 pub fn update_ui(
     mut messages: EventReader<UiMessage>,
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
-    mut writer: EventWriter<EndTurnEvent>,
+    mut state: ResMut<GameState>,
     mut reset_writer: EventWriter<ResetEvent>,
 ) {
+    if state.firing {
+        for msg in messages.read() {
+            if let UiMessage::Reset = msg {
+                reset_writer.send(ResetEvent {});
+            }
+        }
+        return;
+    }
     let (_, mut player, mut tank, mut transform, _) =
         if let Some(props) = get_current_player_props(&mut query) {
             props
         } else {
+            // TODO this is not good
+            for msg in messages.read() {
+                if let UiMessage::Reset = msg {
+                    reset_writer.send(ResetEvent {});
+                }
+            }
             return;
         };
     for msg in messages.read() {
@@ -80,8 +93,7 @@ pub fn update_ui(
                     origin: &transform.translation,
                 };
                 (player.selected_bullet.1)(&mut commands, &mut meshes, &mut materials, &info);
-                // TODO make this depend on other logic
-                writer.send(EndTurnEvent {});
+                state.firing = true;
             }
             UiMessage::SetVelocity(velocity) => {
                 player.fire_velocity = *velocity;

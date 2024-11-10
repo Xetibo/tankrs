@@ -12,7 +12,9 @@ use bullets::{Bullet, BulletType, NORMAL_BULLET};
 use inputs::{handle_keypress, KeyMap};
 use tank::{Tank, TankBundle};
 use ui::{update_ui, view_ui};
-use utils::{get_current_player_props, polynomial, EndTurnEvent, Player, ResetEvent};
+use utils::{
+    get_current_player_props, polynomial, EndTurnEvent, FireEvent, GameState, Player, ResetEvent,
+};
 
 const PLAYER_COUNT: u32 = 2;
 
@@ -41,8 +43,10 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(IcedPlugin::default())
         .add_event::<UiMessage>()
+        .add_event::<FireEvent>()
         .add_event::<EndTurnEvent>()
         .add_event::<ResetEvent>()
+        .insert_resource::<GameState>(GameState { firing: false })
         .add_systems(Startup, setup)
         .add_systems(Update, reset_players)
         .add_systems(Update, view_ui)
@@ -253,10 +257,17 @@ fn collision_handler(
 
 fn bullet_collision(
     mut commands: Commands,
+    mut state: ResMut<GameState>,
     bullets: Query<(Entity, &mut Bullet, &Transform)>,
     walls: Query<(&Wall, &Transform)>,
     tanks: Query<(Entity, &Tank, &Transform)>,
+    mut writer: EventWriter<EndTurnEvent>,
 ) {
+    if state.firing && bullets.iter().len() == 0 {
+        state.firing = false;
+        writer.send(EndTurnEvent {});
+        return;
+    }
     for (entity, _, bullet_transform) in &bullets {
         for (_, _) in &walls {
             if bullet_transform.translation.y

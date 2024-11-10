@@ -10,7 +10,7 @@ use bevy::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, Player},
+    utils::{get_current_player_props, GameState, Player},
 };
 
 #[derive(Component, Clone)]
@@ -45,7 +45,11 @@ pub fn handle_keypress(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    state: Res<GameState>,
 ) {
+    if state.firing {
+        return;
+    }
     let (_, mut player, mut tank, mut transform, mut sprite) =
         if let Some(props) = get_current_player_props(&mut query) {
             props

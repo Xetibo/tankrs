@@ -1,6 +1,6 @@
 use bevy::{
     asset::Assets,
-    prelude::{Commands, Component, Entity, Event, Mesh, Mut, Query, ResMut, Transform},
+    prelude::{Commands, Component, Entity, Event, Mesh, Mut, Query, ResMut, Resource, Transform},
     sprite::{ColorMaterial, Sprite},
     utils::HashMap,
 };
@@ -12,6 +12,9 @@ use crate::{
 };
 
 #[derive(Event)]
+pub struct FireEvent {}
+
+#[derive(Event)]
 pub struct EndTurnEvent {}
 
 #[derive(Event)]
@@ -20,6 +23,11 @@ pub struct ResetEvent {}
 #[derive(Component)]
 pub struct Inventory {
     //
+}
+
+#[derive(Resource)]
+pub struct GameState {
+    pub firing: bool,
 }
 
 pub type BulletFn =
