@@ -1,26 +1,26 @@
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, rc::Rc};
 
 use bevy::{
     asset::Assets,
     input::ButtonInput,
-    prelude::{Commands, Component, KeyCode, Mesh, Query, Res, ResMut, Transform},
+    prelude::{Commands, Component, Entity, KeyCode, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
 };
 
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::Tank,
-    utils::Player,
+    utils::{get_current_player_props, Player},
 };
 
 #[derive(Component, Clone)]
 pub struct KeyMap {
-    tank_left: Arc<RefCell<KeyCode>>,
-    tank_right: Arc<RefCell<KeyCode>>,
-    aim_left: Arc<RefCell<KeyCode>>,
-    aim_right: Arc<RefCell<KeyCode>>,
-    fire: Arc<RefCell<KeyCode>>,
-    switch_bullet: Arc<RefCell<KeyCode>>,
+    tank_left: Rc<RefCell<KeyCode>>,
+    tank_right: Rc<RefCell<KeyCode>>,
+    aim_left: Rc<RefCell<KeyCode>>,
+    aim_right: Rc<RefCell<KeyCode>>,
+    fire: Rc<RefCell<KeyCode>>,
+    switch_bullet: Rc<RefCell<KeyCode>>,
 }
 
 unsafe impl Send for KeyMap {}
@@ -29,39 +29,26 @@ unsafe impl Sync for KeyMap {}
 impl KeyMap {
     pub fn default_keymap() -> KeyMap {
         KeyMap {
-            tank_left: Arc::new(RefCell::new(KeyCode::ArrowLeft)),
-            tank_right: Arc::new(RefCell::new(KeyCode::ArrowRight)),
-            aim_left: Arc::new(RefCell::new(KeyCode::KeyA)),
-            aim_right: Arc::new(RefCell::new(KeyCode::KeyD)),
-            fire: Arc::new(RefCell::new(KeyCode::Space)),
-            switch_bullet: Arc::new(RefCell::new(KeyCode::ShiftLeft)),
+            tank_left: Rc::new(RefCell::new(KeyCode::ArrowLeft)),
+            tank_right: Rc::new(RefCell::new(KeyCode::ArrowRight)),
+            aim_left: Rc::new(RefCell::new(KeyCode::KeyA)),
+            aim_right: Rc::new(RefCell::new(KeyCode::KeyD)),
+            fire: Rc::new(RefCell::new(KeyCode::Space)),
+            switch_bullet: Rc::new(RefCell::new(KeyCode::ShiftLeft)),
         }
     }
 }
 
 pub fn handle_keypress(
-    mut query: Query<(&mut Tank, &mut Player, &mut Transform, &mut Sprite)>,
+    mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     keys: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    // TODO deduplicate
-    let (mut tank_opt, mut player_opt, mut transform_opt, mut sprite_opt) =
-        (None, None, None, None);
-    for (tank, player, transform, sprite) in &mut query {
-        if player.is_active {
-            tank_opt = Some(tank);
-            player_opt = Some(player);
-            transform_opt = Some(transform);
-            sprite_opt = Some(sprite);
-        }
-    }
-    let (mut tank, mut player, mut transform, mut sprite) =
-        if let (Some(tank), Some(player), Some(transform), Some(sprite)) =
-            (tank_opt, player_opt, transform_opt, sprite_opt)
-        {
-            (tank, player, transform, sprite)
+    let (_, mut player, mut tank, mut transform, mut sprite) =
+        if let Some(props) = get_current_player_props(&mut query) {
+            props
         } else {
             return;
         };

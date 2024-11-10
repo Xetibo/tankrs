@@ -1,5 +1,3 @@
-use std::fmt::{Display, Write};
-
 use bevy::{
     asset::Assets,
     prelude::{Commands, Component, Entity, Event, Mesh, Mut, Query, ResMut, Transform},
@@ -8,7 +6,7 @@ use bevy::{
 };
 
 use crate::{
-    bullets::{BulletBundle, BulletCount, BulletInfo, BulletType},
+    bullets::{BulletCount, BulletInfo, BulletType},
     inputs::KeyMap,
     tank::Tank,
 };
@@ -16,24 +14,31 @@ use crate::{
 #[derive(Event)]
 pub struct EndTurnEvent {}
 
+#[derive(Event)]
+pub struct ResetEvent {}
+
 #[derive(Component)]
 pub struct Inventory {
     //
 }
 
+pub type BulletFn =
+    fn(&mut Commands, &mut ResMut<Assets<Mesh>>, &mut ResMut<Assets<ColorMaterial>>, &BulletInfo);
+pub type BulletTypeAndFn = (BulletType, BulletFn);
+
+pub type PlayerProps<'a> = Option<(
+    Entity,
+    Mut<'a, Player>,
+    Mut<'a, Tank>,
+    Mut<'a, Transform>,
+    Mut<'a, Sprite>,
+)>;
+
 #[derive(Component, Clone)]
 pub struct Player {
     pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
-    pub selected_bullet: (
-        BulletType,
-        fn(
-            &mut Commands,
-            &mut ResMut<Assets<Mesh>>,
-            &mut ResMut<Assets<ColorMaterial>>,
-            &BulletInfo,
-        ),
-    ),
+    pub selected_bullet: BulletTypeAndFn,
     pub health: u32,
     pub fuel: u32,
     pub key_map: KeyMap,
@@ -42,14 +47,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn selected_bullet(
-        &self,
-    ) -> fn(
-        &mut Commands<'_, '_>,
-        &mut ResMut<'_, Assets<Mesh>>,
-        &mut ResMut<'_, Assets<ColorMaterial>>,
-        &BulletInfo,
-    ) {
+    pub fn selected_bullet(&self) -> BulletFn {
         self.selected_bullet.1
     }
 }
@@ -63,9 +61,9 @@ pub fn polynomial(x: i32, rand: f32) -> f32 {
     (x * rand * 0.005).cos() * 100. * rand + 100.0
 }
 
-pub fn power(num: f32, pow: i32) -> f32 {
+pub fn power(_num: f32, pow: i32) -> f32 {
     if pow > 0 {
-        power(num, pow - 1)
+        power(_num, pow - 1)
     } else {
         1.0
     }
@@ -73,13 +71,7 @@ pub fn power(num: f32, pow: i32) -> f32 {
 
 pub fn get_current_player_props<'a>(
     query: &'a mut Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
-) -> Option<(
-    Entity,
-    Mut<'a, Player>,
-    Mut<'a, Tank>,
-    Mut<'a, Transform>,
-    Mut<'a, Sprite>,
-)> {
+) -> PlayerProps<'a> {
     let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt, mut sprite_opt) =
         (None, None, None, None, None);
     for (entity, player, tank, transform, sprite) in query {

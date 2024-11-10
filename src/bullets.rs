@@ -9,7 +9,7 @@ use bevy::{
     utils::HashMap,
 };
 
-use crate::tank::Angle;
+use crate::{tank::Angle, utils::BulletFn};
 
 #[derive(Component)]
 pub struct BulletCollider {}
@@ -54,10 +54,7 @@ impl BulletType {
         }
     }
 
-    pub fn get_bullet_from_type(
-        &self,
-    ) -> fn(&mut Commands, &mut ResMut<Assets<Mesh>>, &mut ResMut<Assets<ColorMaterial>>, &BulletInfo)
-    {
+    pub fn get_bullet_from_type(&self) -> BulletFn {
         match self {
             BulletType::RegularBullet => NORMAL_BULLET,
             BulletType::FireBullet => FIRE_BULLET,
@@ -110,15 +107,10 @@ impl<'a> BulletInfo<'a> {
     }
 }
 
-pub const NORMAL_BULLET: fn(
-    &mut Commands,
-    &mut ResMut<Assets<Mesh>>,
-    &mut ResMut<Assets<ColorMaterial>>,
-    &BulletInfo,
-) = |commands: &mut Commands,
-     meshes: &mut ResMut<Assets<Mesh>>,
-     materials: &mut ResMut<Assets<ColorMaterial>>,
-     info: &BulletInfo| {
+pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
+                                     meshes: &mut ResMut<Assets<Mesh>>,
+                                     materials: &mut ResMut<Assets<ColorMaterial>>,
+                                     info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
         y: info.origin.y + 20.0,
@@ -153,15 +145,10 @@ pub const NORMAL_BULLET: fn(
     ));
 };
 
-pub const FIRE_BULLET: fn(
-    &mut Commands,
-    &mut ResMut<Assets<Mesh>>,
-    &mut ResMut<Assets<ColorMaterial>>,
-    &BulletInfo,
-) = |commands: &mut Commands,
-     meshes: &mut ResMut<Assets<Mesh>>,
-     materials: &mut ResMut<Assets<ColorMaterial>>,
-     info: &BulletInfo| {
+pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
+                                   meshes: &mut ResMut<Assets<Mesh>>,
+                                   materials: &mut ResMut<Assets<ColorMaterial>>,
+                                   info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
         y: info.origin.y + 20.0,

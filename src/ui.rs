@@ -2,13 +2,9 @@ use core::f32;
 use std::ops::RangeInclusive;
 
 use bevy::{
-    asset::{AssetServer, Assets},
-    prelude::{
-        default, Commands, DespawnRecursiveExt, Entity, EventReader, EventWriter, Mesh, Query, Res,
-        ResMut, Transform,
-    },
-    sprite::{ColorMaterial, Sprite, SpriteBundle},
-    transform,
+    asset::Assets,
+    prelude::{Commands, Entity, EventReader, EventWriter, Mesh, Query, ResMut, Transform},
+    sprite::{ColorMaterial, Sprite},
 };
 use bevy_iced::{
     iced::{
@@ -20,8 +16,8 @@ use bevy_iced::{
 
 use crate::{
     bullets::{BulletInfo, BulletType},
-    tank::{Tank, TankBundle},
-    utils::{get_current_player_props, EndTurnEvent, Player},
+    tank::Tank,
+    utils::{get_current_player_props, EndTurnEvent, Player, ResetEvent},
     UiMessage,
 };
 
@@ -49,50 +45,24 @@ pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMes
 
 /// help text
 pub fn update_ui(
-    asset_server: Res<AssetServer>,
     mut messages: EventReader<UiMessage>,
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut writer: EventWriter<EndTurnEvent>,
+    mut reset_writer: EventWriter<ResetEvent>,
 ) {
-    let (entity, mut player, mut tank, mut transform, _) =
+    let (_, mut player, mut tank, mut transform, _) =
         if let Some(props) = get_current_player_props(&mut query) {
             props
         } else {
             return;
         };
-    //let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt) =
-    //    (None, None, None, None);
-    //for (entity, player, tank, transform) in &mut query {
-    //    if player.is_active {
-    //        entity_opt = Some(entity);
-    //        player_opt = Some(player);
-    //        tank_opt = Some(tank);
-    //        transform_opt = Some(transform);
-    //    }
-    //}
-    //let (entity, mut player, mut tank, mut transform) =
-    //    if let (Some(player), Some(entity), Some(tank), Some(transform)) =
-    //        (player_opt, entity_opt, tank_opt, transform_opt)
-    //    {
-    //        (entity, player, tank, transform)
-    //    } else {
-    //        return;
-    //    };
     for msg in messages.read() {
         match msg {
             UiMessage::Reset => {
-                commands.entity(entity).despawn_recursive();
-                commands.spawn(TankBundle {
-                    sprite: SpriteBundle {
-                        texture: asset_server.load("greentank_rechts.png"),
-                        ..default()
-                    },
-                    player: player.clone(),
-                    tank: tank.clone(),
-                });
+                reset_writer.send(ResetEvent {});
             }
             UiMessage::MoveRight => {
                 // TODO deduplicate form inputs

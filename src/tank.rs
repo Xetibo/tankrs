@@ -19,11 +19,7 @@ impl Default for Angle {
 
 impl Angle {
     fn check(value: f32) -> bool {
-        if value >= 0.0 && value <= std::f32::consts::PI {
-            true
-        } else {
-            false
-        }
+        (0.0..=std::f32::consts::PI).contains(&value)
     }
 
     pub fn new(value: f32) -> Option<Angle> {

@@ -1,36 +1,18 @@
 use core::f32;
-use std::collections::btree_map::Range;
 
 use bevy::{
-    ecs::bundle::DynamicBundle,
     math::Vec2,
     prelude::*,
-    render::{
-        mesh::{Indices, PrimitiveTopology},
-        render_asset::RenderAssetUsages,
-    },
-    sprite::{Material2d, MaterialMesh2dBundle, Mesh2dHandle},
-    utils::HashMap,
+    render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-//use bevy_iced::iced::widget::{, container, row, text};
-//use bevy_iced::iced::widget::{button};
 
-use bevy_iced::{
-    iced::{
-        widget::{button, row, text},
-        Theme,
-    },
-    IcedContext, IcedPlugin, Renderer,
-};
+use bevy_iced::IcedPlugin;
 use bullets::{Bullet, BulletType, NORMAL_BULLET};
 use inputs::{handle_keypress, KeyMap};
-//use oxiced::widgets::{
-//    oxi_button::{button, ButtonVariant},
-//    oxi_text::text,
-//};
 use tank::{Tank, TankBundle};
 use ui::{update_ui, view_ui};
-use utils::{polynomial, EndTurnEvent, Player};
+use utils::{get_current_player_props, polynomial, EndTurnEvent, Player, ResetEvent};
 
 const PLAYER_COUNT: u32 = 2;
 
@@ -60,8 +42,9 @@ fn main() {
         .add_plugins(IcedPlugin::default())
         .add_event::<UiMessage>()
         .add_event::<EndTurnEvent>()
+        .add_event::<ResetEvent>()
         .add_systems(Startup, setup)
-        .add_systems(Startup, reset_players)
+        .add_systems(Update, reset_players)
         .add_systems(Update, view_ui)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
@@ -80,14 +63,14 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    mut writer: EventWriter<ResetEvent>,
 ) {
     //let rand: f32 = rand::random::<f32>().clamp(0.0, 5.0);
     let rand: f32 = 0.5;
     let mut vertices = Vec::new();
     let mut i = -1920;
     //for _ in -1000..1000 {
-    for x in -1920..1920 {
+    for _ in -1920..1920 {
         vertices.push([i as f32, 0.0, 0.0]);
         let two = [i as f32, polynomial(i, rand), 0.0];
         let three = [(i + 1) as f32, 0.0, 0.0];
@@ -125,7 +108,7 @@ fn setup(
     //for i in 0..(6 * 10) {
     //    indices.push(i);
     //}
-    let mut poly = Mesh::new(
+    let poly = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     )
@@ -173,46 +156,48 @@ fn setup(
     //    Wall {},
     //));
     //generate_terrain(materials, meshes, commands);
+    writer.send(ResetEvent {});
 }
 
 fn reset_players(
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     query: Query<(Entity, &Player)>,
+    mut reader: EventReader<ResetEvent>,
 ) {
-    for (entity, _) in query.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    for i in 0..PLAYER_COUNT {
-        commands.spawn(TankBundle {
-            sprite: SpriteBundle {
-                texture: asset_server.load("greentank_rechts.png"),
-                ..default()
-            },
-            tank: Tank {
-                blocked_direction: Vec2::default(),
-                scale: Vec3 {
-                    x: 300.0,
-                    y: 30.0,
-                    z: 0.0,
+    if reader.read().next().is_some() {
+        for (entity, _) in query.iter() {
+            commands.entity(entity).despawn_recursive();
+        }
+        for i in 0..PLAYER_COUNT {
+            commands.spawn(TankBundle {
+                sprite: SpriteBundle {
+                    texture: asset_server.load("greentank_rechts.png"),
+                    ..default()
                 },
-                // top right
-                shooting_direction: tank::Angle::default(),
-                shooting_velocity: Vec2::new(100.0, 600.0),
-            },
-            player: Player {
-                player_number: i,
-                inventory: BulletType::init_bullets(),
-                health: 100,
-                fuel: 100,
-                key_map: KeyMap::default_keymap(),
-                selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
-                is_active: i == 0,
-                fire_velocity: 0,
-            },
-        });
+                tank: Tank {
+                    blocked_direction: Vec2::default(),
+                    scale: Vec3 {
+                        x: 300.0,
+                        y: 30.0,
+                        z: 0.0,
+                    },
+                    // top right
+                    shooting_direction: tank::Angle::default(),
+                    shooting_velocity: Vec2::new(100.0, 600.0),
+                },
+                player: Player {
+                    player_number: i,
+                    inventory: BulletType::init_bullets(),
+                    health: 100,
+                    fuel: 100,
+                    key_map: KeyMap::default_keymap(),
+                    selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+                    is_active: i == 0,
+                    fire_velocity: 0,
+                },
+            });
+        }
     }
 }
 
@@ -229,8 +214,8 @@ fn move_bullets(time: Res<Time>, mut query: Query<(&mut Bullet, &mut Transform)>
             + bullet.velocity_gravity.y * -1.0 * time.delta_seconds();
 
         // calculate new velocities
-        bullet.velocity_shot.y = time.delta_seconds() * -50.0 + bullet.velocity_shot.y;
-        bullet.velocity_gravity.y = time.delta_seconds() * 50.0 + bullet.velocity_gravity.y;
+        bullet.velocity_shot.y += time.delta_seconds() * -50.0;
+        bullet.velocity_gravity.y += time.delta_seconds() * 50.0;
         if bullet.velocity_shot.x > 0.0 {
             bullet.velocity_shot.x =
                 (time.delta_seconds() * -10.0 + bullet.velocity_shot.x).clamp(0.0, 1000.0);
@@ -242,7 +227,7 @@ fn move_bullets(time: Res<Time>, mut query: Query<(&mut Bullet, &mut Transform)>
 }
 
 fn gravity(mut query: Query<(&Tank, &mut Transform)>) {
-    for (tank, mut transform) in &mut query {
+    for (_, mut transform) in &mut query {
         transform.translation.y = (transform.translation.y - 9.81).clamp(
             polynomial(transform.translation.x as i32, 0.5) - 550.0,
             1000.0,
@@ -273,7 +258,7 @@ fn bullet_collision(
     tanks: Query<(Entity, &Tank, &Transform)>,
 ) {
     for (entity, _, bullet_transform) in &bullets {
-        for (_, wall_transform) in &walls {
+        for (_, _) in &walls {
             if bullet_transform.translation.y
                 < polynomial(bullet_transform.translation.x as i32, 0.5) - 650.0
             {
@@ -295,24 +280,20 @@ fn bullet_collision(
     }
 }
 
-fn swap_player(mut reader: EventReader<EndTurnEvent>, mut players: Query<&mut Player>) {
+fn swap_player(
+    mut reader: EventReader<EndTurnEvent>,
+    mut players: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+) {
     for _ in reader.read() {
-        // TODO deduplicate
-        let mut player_opt = None;
-        for player in &mut players {
-            if player.is_active {
-                player_opt = Some(player);
-            }
-        }
-        let mut player = if let Some(player) = player_opt {
-            player
+        let (_, mut player, _, _, _) = if let Some(props) = get_current_player_props(&mut players) {
+            props
         } else {
             return;
         };
         player.is_active = false;
         let is_highest = player.player_number == PLAYER_COUNT - 1;
         let previous = player.player_number;
-        for mut player in &mut players {
+        for (_, mut player, _, _, _) in &mut players {
             if is_highest && player.player_number == 0 || player.player_number == previous + 1 {
                 player.is_active = true;
             }
