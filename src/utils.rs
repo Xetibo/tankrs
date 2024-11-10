@@ -32,6 +32,8 @@ pub struct Player {
     pub health: u32,
     pub fuel: u32,
     pub key_map: KeyMap,
+    pub is_active: bool,
+    pub fire_velocity: u32,
 }
 
 impl Player {

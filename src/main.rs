@@ -29,16 +29,27 @@ use inputs::{handle_keypress, KeyMap};
 //    oxi_text::text,
 //};
 use tank::{Tank, TankBundle};
+use ui::{update_ui, view_ui};
 use utils::{polynomial, Player};
 
 pub mod bullets;
 pub mod inputs;
 pub mod tank;
+pub mod ui;
 pub mod utils;
 
 #[derive(Event, Clone)]
 pub enum UiMessage {
     Reset,
+    MoveRight,
+    MoveLeft,
+    Fire,
+    SetVelocity(u32),
+    SetAngle(f32),
+    SelectBullet(BulletType),
+    // UseRepair,
+    // Teleport,
+    // Parachute,
 }
 
 fn main() {
@@ -47,7 +58,7 @@ fn main() {
         .add_plugins(IcedPlugin::default())
         .add_event::<UiMessage>()
         .add_systems(Startup, setup)
-        .add_systems(Update, ui_system)
+        .add_systems(Update, view_ui)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
         .add_systems(Update, bullet_collision)
@@ -55,43 +66,6 @@ fn main() {
         .add_systems(Update, move_bullets)
         .add_systems(Update, update_ui)
         .run();
-}
-
-fn ui_system(time: Res<Time>, mut ctx: IcedContext<UiMessage>) {
-    ctx.display(row![
-        //text(format!(
-        //    "Hello Iced! Running for {:.2} seconds.",
-        //    time.elapsed_seconds()
-        //)),
-        //button(text("Reset")).on_press(UiMessage::Reset)
-        button(text(format!("Reset"))).on_press(UiMessage::Reset)
-    ]);
-}
-
-/// help text
-fn update_ui(
-    asset_server: Res<AssetServer>,
-    mut messages: EventReader<UiMessage>,
-    mut commands: Commands,
-    query: Query<(Entity, &Player, &Tank)>,
-) {
-    for msg in messages.read() {
-        match msg {
-            UiMessage::Reset => {
-                for (entity, player, tank) in query.iter() {
-                    commands.entity(entity).despawn_recursive();
-                    commands.spawn(TankBundle {
-                        sprite: SpriteBundle {
-                            texture: asset_server.load("greentank_rechts.png"),
-                            ..default()
-                        },
-                        player: player.clone(),
-                        tank: tank.clone(),
-                    });
-                }
-            }
-        }
-    }
 }
 
 #[derive(Component)]
@@ -176,6 +150,9 @@ fn setup(
             fuel: 100,
             key_map: KeyMap::default_keymap(),
             selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+            // TODO
+            is_active: true,
+            fire_velocity: 0,
         },
     });
 
