@@ -2,7 +2,7 @@ use std::fmt::{Display, Write};
 
 use bevy::{
     asset::Assets,
-    prelude::{Commands, Component, Mesh, ResMut},
+    prelude::{Commands, Component, Event, Mesh, ResMut},
     sprite::ColorMaterial,
     utils::HashMap,
 };
@@ -12,6 +12,9 @@ use crate::{
     inputs::KeyMap,
 };
 
+#[derive(Event)]
+pub struct EndTurnEvent {}
+
 #[derive(Component)]
 pub struct Inventory {
     //
@@ -19,6 +22,7 @@ pub struct Inventory {
 
 #[derive(Component, Clone)]
 pub struct Player {
+    pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
     pub selected_bullet: (
         BulletType,

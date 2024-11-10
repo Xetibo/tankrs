@@ -4,8 +4,8 @@ use std::ops::RangeInclusive;
 use bevy::{
     asset::{AssetServer, Assets},
     prelude::{
-        default, Commands, DespawnRecursiveExt, Entity, EventReader, Mesh, Query, Res, ResMut,
-        Transform,
+        default, Commands, DespawnRecursiveExt, Entity, EventReader, EventWriter, Mesh, Query, Res,
+        ResMut, Transform,
     },
     sprite::{ColorMaterial, SpriteBundle},
     transform,
@@ -21,11 +21,12 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::{Tank, TankBundle},
-    utils::Player,
+    utils::{EndTurnEvent, Player},
     UiMessage,
 };
 
 pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMessage>) {
+    let button = button(text("Reset")).on_press(UiMessage::Reset);
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
         if player.is_active {
@@ -33,20 +34,17 @@ pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMes
             player_tank_opt = Some(tank);
         }
     }
-    let (current_player, player_tank) =
-        if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
-            (player, tank)
-        } else {
-            // TODO remove
-            panic!("No player playing?!");
-        };
-    let button = button(text("Reset")).on_press(UiMessage::Reset);
-    ctx.display(row![
-        button,
-        bullet_picker(current_player).into(),
-        fuel(current_player).into(),
-        firing(current_player, player_tank).into()
-    ]);
+    if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
+        ctx.display(row![
+            button,
+            text(format!("Player: {}", player.player_number)),
+            bullet_picker(player).into(),
+            fuel(player).into(),
+            firing(player, tank).into()
+        ]);
+    } else {
+        ctx.display(row![button,]);
+    }
 }
 
 /// help text
@@ -57,6 +55,7 @@ pub fn update_ui(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform)>,
+    mut writer: EventWriter<EndTurnEvent>,
 ) {
     let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt) =
         (None, None, None, None);
@@ -74,8 +73,7 @@ pub fn update_ui(
         {
             (entity, player, tank, transform)
         } else {
-            // TODO remove
-            panic!("No player playing?!");
+            return;
         };
     for msg in messages.read() {
         match msg {
@@ -106,6 +104,8 @@ pub fn update_ui(
                     origin: &transform.translation,
                 };
                 (player.selected_bullet.1)(&mut commands, &mut meshes, &mut materials, &info);
+                // TODO make this depend on other logic
+                writer.send(EndTurnEvent {});
             }
             UiMessage::SetVelocity(velocity) => {
                 player.fire_velocity = *velocity;

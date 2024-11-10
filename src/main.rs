@@ -30,7 +30,9 @@ use inputs::{handle_keypress, KeyMap};
 //};
 use tank::{Tank, TankBundle};
 use ui::{update_ui, view_ui};
-use utils::{polynomial, Player};
+use utils::{polynomial, EndTurnEvent, Player};
+
+const PLAYER_COUNT: u32 = 2;
 
 pub mod bullets;
 pub mod inputs;
@@ -57,6 +59,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(IcedPlugin::default())
         .add_event::<UiMessage>()
+        .add_event::<EndTurnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Update, view_ui)
         .add_systems(Update, handle_keypress)
@@ -65,6 +68,7 @@ fn main() {
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .add_systems(Update, update_ui)
+        .add_systems(Update, swap_player)
         .run();
 }
 
@@ -128,33 +132,36 @@ fn setup(
 
     //poly.insert_indices(Indices::U32(indices));
     commands.spawn(Camera2dBundle::default());
-    commands.spawn(TankBundle {
-        sprite: SpriteBundle {
-            texture: asset_server.load("greentank_rechts.png"),
-            ..default()
-        },
-        tank: Tank {
-            blocked_direction: Vec2::default(),
-            scale: Vec3 {
-                x: 300.0,
-                y: 30.0,
-                z: 0.0,
+
+    for i in 0..PLAYER_COUNT {
+        commands.spawn(TankBundle {
+            sprite: SpriteBundle {
+                texture: asset_server.load("greentank_rechts.png"),
+                ..default()
             },
-            // top right
-            shooting_direction: tank::Angle::default(),
-            shooting_velocity: Vec2::new(100.0, 600.0),
-        },
-        player: Player {
-            inventory: BulletType::init_bullets(),
-            health: 100,
-            fuel: 100,
-            key_map: KeyMap::default_keymap(),
-            selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
-            // TODO
-            is_active: true,
-            fire_velocity: 0,
-        },
-    });
+            tank: Tank {
+                blocked_direction: Vec2::default(),
+                scale: Vec3 {
+                    x: 300.0,
+                    y: 30.0,
+                    z: 0.0,
+                },
+                // top right
+                shooting_direction: tank::Angle::default(),
+                shooting_velocity: Vec2::new(100.0, 600.0),
+            },
+            player: Player {
+                player_number: i,
+                inventory: BulletType::init_bullets(),
+                health: 100,
+                fuel: 100,
+                key_map: KeyMap::default_keymap(),
+                selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+                is_active: i == 0,
+                fire_velocity: 0,
+            },
+        });
+    }
 
     commands.spawn((
         MaterialMesh2dBundle {
@@ -271,6 +278,31 @@ fn bullet_collision(
                     >= tank_transform.translation.x - (tank.scale.x / 2.0)
             {
                 commands.entity(tank_entity).despawn_recursive();
+            }
+        }
+    }
+}
+
+fn swap_player(mut reader: EventReader<EndTurnEvent>, mut players: Query<&mut Player>) {
+    for _ in reader.read() {
+        // TODO deduplicate
+        let mut player_opt = None;
+        for player in &mut players {
+            if player.is_active {
+                player_opt = Some(player);
+            }
+        }
+        let mut player = if let Some(player) = player_opt {
+            player
+        } else {
+            return;
+        };
+        player.is_active = false;
+        let is_highest = player.player_number == PLAYER_COUNT - 1;
+        let previous = player.player_number;
+        for mut player in &mut players {
+            if is_highest && player.player_number == 0 || player.player_number == previous + 1 {
+                player.is_active = true;
             }
         }
     }
