@@ -61,6 +61,7 @@ fn main() {
         .add_event::<UiMessage>()
         .add_event::<EndTurnEvent>()
         .add_systems(Startup, setup)
+        .add_systems(Startup, reset_players)
         .add_systems(Update, view_ui)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
@@ -133,36 +134,6 @@ fn setup(
     //poly.insert_indices(Indices::U32(indices));
     commands.spawn(Camera2dBundle::default());
 
-    for i in 0..PLAYER_COUNT {
-        commands.spawn(TankBundle {
-            sprite: SpriteBundle {
-                texture: asset_server.load("greentank_rechts.png"),
-                ..default()
-            },
-            tank: Tank {
-                blocked_direction: Vec2::default(),
-                scale: Vec3 {
-                    x: 300.0,
-                    y: 30.0,
-                    z: 0.0,
-                },
-                // top right
-                shooting_direction: tank::Angle::default(),
-                shooting_velocity: Vec2::new(100.0, 600.0),
-            },
-            player: Player {
-                player_number: i,
-                inventory: BulletType::init_bullets(),
-                health: 100,
-                fuel: 100,
-                key_map: KeyMap::default_keymap(),
-                selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
-                is_active: i == 0,
-                fire_velocity: 0,
-            },
-        });
-    }
-
     commands.spawn((
         MaterialMesh2dBundle {
             mesh: Mesh2dHandle(meshes.add(poly)),
@@ -202,6 +173,47 @@ fn setup(
     //    Wall {},
     //));
     //generate_terrain(materials, meshes, commands);
+}
+
+fn reset_players(
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    query: Query<(Entity, &Player)>,
+) {
+    for (entity, _) in query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    for i in 0..PLAYER_COUNT {
+        commands.spawn(TankBundle {
+            sprite: SpriteBundle {
+                texture: asset_server.load("greentank_rechts.png"),
+                ..default()
+            },
+            tank: Tank {
+                blocked_direction: Vec2::default(),
+                scale: Vec3 {
+                    x: 300.0,
+                    y: 30.0,
+                    z: 0.0,
+                },
+                // top right
+                shooting_direction: tank::Angle::default(),
+                shooting_velocity: Vec2::new(100.0, 600.0),
+            },
+            player: Player {
+                player_number: i,
+                inventory: BulletType::init_bullets(),
+                health: 100,
+                fuel: 100,
+                key_map: KeyMap::default_keymap(),
+                selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+                is_active: i == 0,
+                fire_velocity: 0,
+            },
+        });
+    }
 }
 
 fn move_bullets(time: Res<Time>, mut query: Query<(&mut Bullet, &mut Transform)>) {

@@ -7,7 +7,7 @@ use bevy::{
         default, Commands, DespawnRecursiveExt, Entity, EventReader, EventWriter, Mesh, Query, Res,
         ResMut, Transform,
     },
-    sprite::{ColorMaterial, SpriteBundle},
+    sprite::{ColorMaterial, Sprite, SpriteBundle},
     transform,
 };
 use bevy_iced::{
@@ -21,7 +21,7 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::{Tank, TankBundle},
-    utils::{EndTurnEvent, Player},
+    utils::{get_current_player_props, EndTurnEvent, Player},
     UiMessage,
 };
 
@@ -54,27 +54,33 @@ pub fn update_ui(
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform)>,
+    mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut writer: EventWriter<EndTurnEvent>,
 ) {
-    let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt) =
-        (None, None, None, None);
-    for (entity, player, tank, transform) in &mut query {
-        if player.is_active {
-            entity_opt = Some(entity);
-            player_opt = Some(player);
-            tank_opt = Some(tank);
-            transform_opt = Some(transform);
-        }
-    }
-    let (entity, mut player, mut tank, mut transform) =
-        if let (Some(player), Some(entity), Some(tank), Some(transform)) =
-            (player_opt, entity_opt, tank_opt, transform_opt)
-        {
-            (entity, player, tank, transform)
+    let (entity, mut player, mut tank, mut transform, _) =
+        if let Some(props) = get_current_player_props(&mut query) {
+            props
         } else {
             return;
         };
+    //let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt) =
+    //    (None, None, None, None);
+    //for (entity, player, tank, transform) in &mut query {
+    //    if player.is_active {
+    //        entity_opt = Some(entity);
+    //        player_opt = Some(player);
+    //        tank_opt = Some(tank);
+    //        transform_opt = Some(transform);
+    //    }
+    //}
+    //let (entity, mut player, mut tank, mut transform) =
+    //    if let (Some(player), Some(entity), Some(tank), Some(transform)) =
+    //        (player_opt, entity_opt, tank_opt, transform_opt)
+    //    {
+    //        (entity, player, tank, transform)
+    //    } else {
+    //        return;
+    //    };
     for msg in messages.read() {
         match msg {
             UiMessage::Reset => {

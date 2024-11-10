@@ -2,14 +2,15 @@ use std::fmt::{Display, Write};
 
 use bevy::{
     asset::Assets,
-    prelude::{Commands, Component, Event, Mesh, ResMut},
-    sprite::ColorMaterial,
+    prelude::{Commands, Component, Entity, Event, Mesh, Mut, Query, ResMut, Transform},
+    sprite::{ColorMaterial, Sprite},
     utils::HashMap,
 };
 
 use crate::{
     bullets::{BulletBundle, BulletCount, BulletInfo, BulletType},
     inputs::KeyMap,
+    tank::Tank,
 };
 
 #[derive(Event)]
@@ -67,5 +68,34 @@ pub fn power(num: f32, pow: i32) -> f32 {
         power(num, pow - 1)
     } else {
         1.0
+    }
+}
+
+pub fn get_current_player_props<'a>(
+    query: &'a mut Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+) -> Option<(
+    Entity,
+    Mut<'a, Player>,
+    Mut<'a, Tank>,
+    Mut<'a, Transform>,
+    Mut<'a, Sprite>,
+)> {
+    let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt, mut sprite_opt) =
+        (None, None, None, None, None);
+    for (entity, player, tank, transform, sprite) in query {
+        if player.is_active {
+            entity_opt = Some(entity);
+            player_opt = Some(player);
+            tank_opt = Some(tank);
+            transform_opt = Some(transform);
+            sprite_opt = Some(sprite);
+        }
+    }
+    if let (Some(player), Some(entity), Some(tank), Some(transform), Some(sprite)) =
+        (player_opt, entity_opt, tank_opt, transform_opt, sprite_opt)
+    {
+        Some((entity, player, tank, transform, sprite))
+    } else {
+        None
     }
 }
