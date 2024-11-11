@@ -11,7 +11,11 @@ use bevy_iced::IcedPlugin;
 use bullets::{Bullet, BulletType, NORMAL_BULLET};
 use inputs::{handle_keypress, KeyMap};
 use tank::{Tank, TankBundle};
-use ui::{update_ui, view_ui};
+use ui::{
+    battle::{update_ui, view_ui, BattleMessage},
+    shop::ShopMessage,
+    startmenu::StartMenuMessage,
+};
 use utils::{
     get_current_player_props, polynomial, EndTurnEvent, FireEvent, GameState, Player, ResetEvent,
 };
@@ -26,16 +30,9 @@ pub mod utils;
 
 #[derive(Event, Clone)]
 pub enum UiMessage {
-    Reset,
-    MoveRight,
-    MoveLeft,
-    Fire,
-    SetVelocity(u32),
-    SetAngle(f32),
-    SelectBullet(BulletType),
-    // UseRepair,
-    // Teleport,
-    // Parachute,
+    StartMenuMessage(StartMenuMessage),
+    BattleMessage(BattleMessage),
+    ShopMessage(ShopMessage),
 }
 
 fn main() {
@@ -46,8 +43,12 @@ fn main() {
         .add_event::<FireEvent>()
         .add_event::<EndTurnEvent>()
         .add_event::<ResetEvent>()
-        .insert_resource::<GameState>(GameState { firing: false })
+        .insert_resource::<GameState>(GameState {
+            firing: false,
+            wind: 0,
+        })
         .add_systems(Startup, setup)
+        .add_systems(Update, update_ui)
         .add_systems(Update, reset_players)
         .add_systems(Update, view_ui)
         .add_systems(Update, handle_keypress)
@@ -55,7 +56,6 @@ fn main() {
         .add_systems(Update, bullet_collision)
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
-        .add_systems(Update, update_ui)
         .add_systems(Update, swap_player)
         .run();
 }
@@ -195,6 +195,7 @@ fn reset_players(
                     inventory: BulletType::init_bullets(),
                     health: 100,
                     fuel: 100,
+                    money: 0,
                     key_map: KeyMap::default_keymap(),
                     selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
                     is_active: i == 0,
@@ -263,10 +264,12 @@ fn bullet_collision(
     tanks: Query<(Entity, &Tank, &Transform)>,
     mut writer: EventWriter<EndTurnEvent>,
 ) {
-    if state.firing && bullets.iter().len() == 0 {
+    if bullets.iter().len() == 0 {
         state.firing = false;
-        writer.send(EndTurnEvent {});
-        return;
+        if state.firing {
+            writer.send(EndTurnEvent {});
+            return;
+        }
     }
     for (entity, _, bullet_transform) in &bullets {
         for (_, _) in &walls {

@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 
 use bevy::{
     asset::Assets,
-    prelude::{Commands, Entity, EventReader, EventWriter, Mesh, Query, ResMut, Transform},
+    prelude::{Commands, Entity, EventReader, EventWriter, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
 };
 use bevy_iced::{
@@ -21,8 +21,32 @@ use crate::{
     UiMessage,
 };
 
-pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMessage>) {
-    let button = button(text("Reset")).on_press(UiMessage::Reset);
+#[derive(Clone)]
+pub enum BattleMessage {
+    Reset,
+    MoveRight,
+    MoveLeft,
+    Fire,
+    SetVelocity(u32),
+    SetAngle(f32),
+    SelectBullet(BulletType),
+    // UseRepair,
+    // Teleport,
+    // Parachute,
+}
+
+impl From<BattleMessage> for UiMessage {
+    fn from(val: BattleMessage) -> Self {
+        UiMessage::BattleMessage(val)
+    }
+}
+
+pub fn view_ui(
+    state: Res<GameState>,
+    player_query: Query<(&Player, &Tank)>,
+    mut ctx: IcedContext<UiMessage>,
+) {
+    let button = button(text("Reset")).on_press(wrap(BattleMessage::Reset));
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
         if player.is_active {
@@ -31,13 +55,18 @@ pub fn view_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMes
         }
     }
     if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
-        ctx.display(row![
-            button,
-            text(format!("Player: {}", player.player_number)),
-            bullet_picker(player).into(),
-            fuel(player).into(),
-            firing(player, tank).into()
-        ]);
+        ctx.display(
+            row![
+                button,
+                bullet_picker(player).into(),
+                fuel(player).into(),
+                firing(player, tank).into(),
+                info_box(state.wind, player).into()
+            ]
+            .spacing(20)
+            .padding(10)
+            .width(1300),
+        );
     } else {
         ctx.display(row![button,]);
     }
@@ -52,9 +81,16 @@ pub fn update_ui(
     mut state: ResMut<GameState>,
     mut reset_writer: EventWriter<ResetEvent>,
 ) {
+    let msgs: Vec<&BattleMessage> = messages
+        .read()
+        .filter_map(|val| match val {
+            UiMessage::BattleMessage(message) => Some(message),
+            _ => None,
+        })
+        .collect();
     if state.firing {
-        for msg in messages.read() {
-            if let UiMessage::Reset = msg {
+        for msg in msgs {
+            if let BattleMessage::Reset = msg {
                 reset_writer.send(ResetEvent {});
             }
         }
@@ -65,27 +101,27 @@ pub fn update_ui(
             props
         } else {
             // TODO this is not good
-            for msg in messages.read() {
-                if let UiMessage::Reset = msg {
+            for msg in msgs {
+                if let BattleMessage::Reset = msg {
                     reset_writer.send(ResetEvent {});
                 }
             }
             return;
         };
-    for msg in messages.read() {
+    for msg in msgs {
         match msg {
-            UiMessage::Reset => {
+            BattleMessage::Reset => {
                 reset_writer.send(ResetEvent {});
             }
-            UiMessage::MoveRight => {
+            BattleMessage::MoveRight => {
                 // TODO deduplicate form inputs
                 transform.translation.x += 10.0;
             }
-            UiMessage::MoveLeft => {
+            BattleMessage::MoveLeft => {
                 // TODO deduplicate form inputs
                 transform.translation.x -= 10.0;
             }
-            UiMessage::Fire => {
+            BattleMessage::Fire => {
                 // TODO deduplicate form inputs
                 let info = BulletInfo {
                     direction: &tank.shooting_direction,
@@ -95,13 +131,13 @@ pub fn update_ui(
                 (player.selected_bullet.1)(&mut commands, &mut meshes, &mut materials, &info);
                 state.firing = true;
             }
-            UiMessage::SetVelocity(velocity) => {
+            BattleMessage::SetVelocity(velocity) => {
                 player.fire_velocity = *velocity;
             }
-            UiMessage::SetAngle(angle) => {
+            BattleMessage::SetAngle(angle) => {
                 tank.shooting_direction.set(*angle);
             }
-            UiMessage::SelectBullet(bullet) => {
+            BattleMessage::SelectBullet(bullet) => {
                 let bullet_fn = bullet.get_bullet_from_type();
                 player.selected_bullet = (bullet.clone(), bullet_fn);
             }
@@ -110,6 +146,10 @@ pub fn update_ui(
 }
 
 type IcedElement = bevy_iced::iced::Element<'static, UiMessage, Theme, Renderer>;
+
+fn wrap(msg: BattleMessage) -> UiMessage {
+    UiMessage::BattleMessage(msg)
+}
 
 fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
     let options: Vec<BulletType> = player
@@ -121,16 +161,21 @@ fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
     column![bevy_iced::iced::widget::pick_list(
         options,
         selected,
-        UiMessage::SelectBullet
+        |val| wrap(BattleMessage::SelectBullet(val))
     )]
 }
 
 fn fuel(player: &Player) -> impl Into<IcedElement> {
-    column![
-        button(text("left")).on_press(UiMessage::MoveLeft),
+    row![
+        button(text("left"))
+            .on_press(wrap(BattleMessage::MoveLeft))
+            .padding(5),
         text(format!("Fuel: {}", player.fuel)),
-        button(text("right")).on_press(UiMessage::MoveRight)
+        button(text("right"))
+            .on_press(wrap(BattleMessage::MoveRight))
+            .padding(5)
     ]
+    .spacing(10)
 }
 
 fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
@@ -140,11 +185,30 @@ fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
 
     let velocity_range = RangeInclusive::new(0, 100);
     let current_velocity = player.fire_velocity;
+    row![
+        column![
+            text("Set Angle"),
+            slider(angle_range, current_angle, |val| wrap(
+                BattleMessage::SetAngle(val)
+            )),
+        ],
+        column![
+            text("Set Velocity"),
+            slider(velocity_range, current_velocity, |val| wrap(
+                BattleMessage::SetVelocity(val)
+            )),
+        ],
+        button(text("fire")).on_press(wrap(BattleMessage::Fire)),
+    ]
+    .spacing(10)
+}
+
+fn info_box(wind: i32, player: &Player) -> impl Into<IcedElement> {
+    // TODO display properly
     column![
-        text("Set Angle"),
-        slider(angle_range, current_angle, UiMessage::SetAngle),
-        text("Set Velocity"),
-        slider(velocity_range, current_velocity, UiMessage::SetVelocity),
-        button(text("fire")).on_press(UiMessage::Fire),
+        text(format!("wind: {}", wind)),
+        text(format!("Player: {}", player.player_number)),
+        text(format!("health: {}", player.health)),
+        text(format!("health: {}", player.money)),
     ]
 }

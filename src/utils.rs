@@ -28,6 +28,7 @@ pub struct Inventory {
 #[derive(Resource)]
 pub struct GameState {
     pub firing: bool,
+    pub wind: i32,
 }
 
 pub type BulletFn =
@@ -49,6 +50,7 @@ pub struct Player {
     pub selected_bullet: BulletTypeAndFn,
     pub health: u32,
     pub fuel: u32,
+    pub money: u32,
     pub key_map: KeyMap,
     pub is_active: bool,
     pub fire_velocity: u32,
