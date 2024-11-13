@@ -1,6 +1,8 @@
 use bevy::{
-    asset::Assets,
-    prelude::{Commands, Component, Entity, Event, Mesh, Mut, Query, ResMut, Resource, Transform},
+    asset::{AssetServer, Assets},
+    prelude::{
+        Commands, Component, Entity, Event, Mesh, Mut, Query, Res, ResMut, Resource, Transform,
+    },
     sprite::{ColorMaterial, Sprite},
     utils::HashMap,
 };
@@ -25,14 +27,27 @@ pub struct Inventory {
     //
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum GameMode {
+    Battle,
+    Shop,
+    StartMenu,
+}
+
 #[derive(Resource)]
 pub struct GameState {
     pub firing: bool,
+    pub mode: GameMode,
     pub wind: i32,
 }
 
-pub type BulletFn =
-    fn(&mut Commands, &mut ResMut<Assets<Mesh>>, &mut ResMut<Assets<ColorMaterial>>, &BulletInfo);
+pub type BulletFn = fn(
+    &mut Commands,
+    &mut ResMut<Assets<Mesh>>,
+    &mut ResMut<Assets<ColorMaterial>>,
+    &Res<AssetServer>,
+    &BulletInfo,
+);
 pub type BulletTypeAndFn = (BulletType, BulletFn);
 
 pub type PlayerProps<'a> = Option<(

@@ -2,8 +2,8 @@ use core::f32;
 use std::ops::RangeInclusive;
 
 use bevy::{
-    asset::Assets,
-    prelude::{Commands, Entity, EventReader, EventWriter, Mesh, Query, Res, ResMut, Transform},
+    asset::{AssetServer, Assets},
+    prelude::{Commands, Entity, EventWriter, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
 };
 use bevy_iced::{
@@ -17,7 +17,7 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, GameState, Player, ResetEvent},
+    utils::{get_current_player_props, GameMode, GameState, Player, ResetEvent},
     UiMessage,
 };
 
@@ -41,12 +41,14 @@ impl From<BattleMessage> for UiMessage {
     }
 }
 
-pub fn view_ui(
+pub fn view_battle_ui(
     state: Res<GameState>,
     player_query: Query<(&Player, &Tank)>,
     mut ctx: IcedContext<UiMessage>,
 ) {
-    let button = button(text("Reset")).on_press(wrap(BattleMessage::Reset));
+    let reset_button = button(text("Reset")).on_press(wrap(BattleMessage::Reset));
+    // TODO remove later -> shop shown at the end of the game
+    let shop_button = button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Shop));
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
         if player.is_active {
@@ -57,7 +59,8 @@ pub fn view_ui(
     if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
         ctx.display(
             row![
-                button,
+                shop_button,
+                reset_button,
                 bullet_picker(player).into(),
                 fuel(player).into(),
                 firing(player, tank).into(),
@@ -68,21 +71,21 @@ pub fn view_ui(
             .width(1300),
         );
     } else {
-        ctx.display(row![button,]);
+        ctx.display(row![reset_button,]);
     }
 }
 
-pub fn update_ui(
-    mut messages: EventReader<UiMessage>,
+pub fn update_battle_ui<'a>(
+    messages: impl Iterator<Item = &'a UiMessage>,
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut state: ResMut<GameState>,
     mut reset_writer: EventWriter<ResetEvent>,
+    asset_server: Res<AssetServer>,
 ) {
     let msgs: Vec<&BattleMessage> = messages
-        .read()
         .filter_map(|val| match val {
             UiMessage::BattleMessage(message) => Some(message),
             _ => None,
@@ -128,7 +131,13 @@ pub fn update_ui(
                     velocity: &tank.shooting_velocity,
                     origin: &transform.translation,
                 };
-                (player.selected_bullet.1)(&mut commands, &mut meshes, &mut materials, &info);
+                (player.selected_bullet.1)(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    &asset_server,
+                    &info,
+                );
                 state.firing = true;
             }
             BattleMessage::SetVelocity(velocity) => {

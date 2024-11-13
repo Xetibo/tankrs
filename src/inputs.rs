@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use bevy::{
-    asset::Assets,
+    asset::{AssetServer, Assets},
     input::ButtonInput,
     prelude::{Commands, Component, Entity, KeyCode, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
@@ -10,7 +10,7 @@ use bevy::{
 use crate::{
     bullets::{BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, GameState, Player},
+    utils::{get_current_player_props, GameMode, GameState, Player},
 };
 
 #[derive(Component, Clone)]
@@ -46,8 +46,9 @@ pub fn handle_keypress(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     state: Res<GameState>,
+    asset_server: Res<AssetServer>,
 ) {
-    if state.firing {
+    if state.firing || state.mode != GameMode::Battle {
         return;
     }
     let (_, mut player, mut tank, mut transform, mut sprite) =
@@ -81,7 +82,13 @@ pub fn handle_keypress(
             velocity: &tank.shooting_velocity,
             origin: &transform.translation,
         };
-        (player.selected_bullet.1)(&mut commands, &mut meshes, &mut materials, &info);
+        (player.selected_bullet.1)(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &asset_server,
+            &info,
+        );
     }
     if keys.pressed(*player.key_map.switch_bullet.borrow()) {
         let previous_bullet = player.selected_bullet.0.get_int_value();

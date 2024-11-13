@@ -1,23 +1,25 @@
 use std::{fmt::Display, hash::Hash};
 
 use bevy::{
-    asset::Assets,
+    asset::{AssetServer, Assets},
     color::Color,
     math::{Vec2, Vec3},
-    prelude::{default, Bundle, Circle, Commands, Component, Mesh, ResMut, Transform},
-    sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle},
+    prelude::{default, Bundle, Circle, Commands, Component, Mesh, Res, ResMut, Transform},
+    sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle, SpriteBundle},
     utils::HashMap,
 };
+use enum_iterator::Sequence;
 
 use crate::{tank::Angle, utils::BulletFn};
 
 #[derive(Component)]
 pub struct BulletCollider {}
 
-#[derive(Component, Eq, PartialEq, Clone)]
+#[derive(Component, Eq, PartialEq, Clone, Copy, Sequence)]
 pub enum BulletType {
     RegularBullet,
     FireBullet,
+    Nuke,
 }
 
 impl Display for BulletType {
@@ -25,6 +27,7 @@ impl Display for BulletType {
         let type_str = match self {
             BulletType::RegularBullet => "RegularBullet",
             BulletType::FireBullet => "FireBullet",
+            BulletType::Nuke => "Nuke",
         };
         f.write_str(type_str)
     }
@@ -42,6 +45,7 @@ impl BulletType {
         match self {
             BulletType::RegularBullet => 0,
             BulletType::FireBullet => 1,
+            BulletType::Nuke => 2,
         }
     }
 
@@ -49,8 +53,8 @@ impl BulletType {
         match value {
             0 => BulletType::RegularBullet,
             1 => BulletType::FireBullet,
-            // TODO whatever
-            _ => BulletType::FireBullet,
+            2 => BulletType::Nuke,
+            _ => panic!("Bullet with this ID doesn't exist"),
         }
     }
 
@@ -58,6 +62,7 @@ impl BulletType {
         match self {
             BulletType::RegularBullet => NORMAL_BULLET,
             BulletType::FireBullet => FIRE_BULLET,
+            BulletType::Nuke => NUKE,
         }
     }
 
@@ -66,6 +71,7 @@ impl BulletType {
         map.insert(BulletType::RegularBullet, BulletCount::Unlimited);
         // TODO remove
         map.insert(BulletType::FireBullet, BulletCount::Count(10));
+        map.insert(BulletType::Nuke, BulletCount::Count(10));
         map
     }
 }
@@ -86,9 +92,15 @@ pub struct Bullet {
 }
 
 #[derive(Bundle)]
-pub struct BulletBundle {
+pub struct BulletMeshBundle {
     pub bullet: Bullet,
     pub mesh_bundle: MaterialMesh2dBundle<ColorMaterial>,
+}
+
+#[derive(Bundle)]
+pub struct BulletSpriteBundle {
+    pub bullet: Bullet,
+    pub sprite_bundle: SpriteBundle,
 }
 
 pub struct BulletInfo<'a> {
@@ -110,6 +122,7 @@ impl<'a> BulletInfo<'a> {
 pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
                                      meshes: &mut ResMut<Assets<Mesh>>,
                                      materials: &mut ResMut<Assets<ColorMaterial>>,
+                                     _: &Res<AssetServer>,
                                      info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
@@ -117,7 +130,7 @@ pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
         z: 0.0,
     };
     commands.spawn((
-        BulletBundle {
+        BulletMeshBundle {
             bullet: Bullet {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
@@ -148,6 +161,7 @@ pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
 pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
                                    meshes: &mut ResMut<Assets<Mesh>>,
                                    materials: &mut ResMut<Assets<ColorMaterial>>,
+                                   _: &Res<AssetServer>,
                                    info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
@@ -155,7 +169,7 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
         z: 0.0,
     };
     commands.spawn((
-        BulletBundle {
+        BulletMeshBundle {
             bullet: Bullet {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
@@ -180,5 +194,38 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
             },
         },
         BulletType::FireBullet,
+    ));
+};
+
+pub const NUKE: BulletFn = |commands: &mut Commands,
+                            _: &mut ResMut<Assets<Mesh>>,
+                            _: &mut ResMut<Assets<ColorMaterial>>,
+                            asset_server: &Res<AssetServer>,
+                            info: &BulletInfo| {
+    let offset_origin = Vec3 {
+        x: info.origin.x,
+        y: info.origin.y + 20.0,
+        z: 0.0,
+    };
+    commands.spawn((
+        BulletSpriteBundle {
+            bullet: Bullet {
+                velocity_shot: *info.velocity,
+                velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
+                direction: *info.direction,
+                // TODO implement
+                damage: 10,
+                radius: 10,
+            },
+            sprite_bundle: SpriteBundle {
+                texture: asset_server.load("../assets/nuke.gif"),
+                transform: Transform {
+                    translation: offset_origin,
+                    ..default()
+                },
+                ..default()
+            },
+        },
+        BulletType::Nuke,
     ));
 };

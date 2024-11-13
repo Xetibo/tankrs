@@ -7,17 +7,18 @@ use bevy::{
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 
-use bevy_iced::IcedPlugin;
+use bevy_iced::{IcedContext, IcedPlugin};
 use bullets::{Bullet, BulletType, NORMAL_BULLET};
 use inputs::{handle_keypress, KeyMap};
 use tank::{Tank, TankBundle};
 use ui::{
-    battle::{update_ui, view_ui, BattleMessage},
-    shop::ShopMessage,
-    startmenu::StartMenuMessage,
+    battle::{update_battle_ui, view_battle_ui, BattleMessage},
+    shop::{update_shop_ui, view_shop_ui, ShopMessage},
+    startmenu::{update_startmenu_ui, view_startmenu_ui, StartMenuMessage},
 };
 use utils::{
-    get_current_player_props, polynomial, EndTurnEvent, FireEvent, GameState, Player, ResetEvent,
+    get_current_player_props, polynomial, EndTurnEvent, FireEvent, GameMode, GameState, Player,
+    ResetEvent,
 };
 
 const PLAYER_COUNT: u32 = 2;
@@ -33,6 +34,7 @@ pub enum UiMessage {
     StartMenuMessage(StartMenuMessage),
     BattleMessage(BattleMessage),
     ShopMessage(ShopMessage),
+    SetSceneMessage(GameMode),
 }
 
 fn main() {
@@ -45,23 +47,83 @@ fn main() {
         .add_event::<ResetEvent>()
         .insert_resource::<GameState>(GameState {
             firing: false,
+            mode: GameMode::Battle,
             wind: 0,
         })
         .add_systems(Startup, setup)
         .add_systems(Update, update_ui)
         .add_systems(Update, reset_players)
         .add_systems(Update, view_ui)
-        .add_systems(Update, handle_keypress)
         .add_systems(Update, collision_handler)
         .add_systems(Update, bullet_collision)
         .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .add_systems(Update, swap_player)
+        .add_systems(Update, handle_keypress)
         .run();
 }
 
 #[derive(Component)]
 struct Wall {}
+
+pub fn update_ui(
+    mut messages: EventReader<UiMessage>,
+    commands: Commands,
+    materials: ResMut<Assets<ColorMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+    mut state: ResMut<GameState>,
+    reset_writer: EventWriter<ResetEvent>,
+    asset_server: Res<AssetServer>,
+) {
+    let mut new_messages = messages.read().peekable();
+    if let Some(UiMessage::SetSceneMessage(mode)) = new_messages.peek() {
+        state.mode = *mode;
+    }
+
+    match state.mode {
+        utils::GameMode::Battle => update_battle_ui(
+            new_messages,
+            commands,
+            materials,
+            meshes,
+            query,
+            state,
+            reset_writer,
+            asset_server,
+        ),
+        utils::GameMode::Shop => update_shop_ui(
+            new_messages,
+            commands,
+            materials,
+            meshes,
+            query,
+            state,
+            reset_writer,
+        ),
+        utils::GameMode::StartMenu => update_startmenu_ui(
+            new_messages,
+            commands,
+            materials,
+            meshes,
+            query,
+            state,
+            reset_writer,
+        ),
+    }
+}
+
+pub fn view_ui(
+    state: Res<GameState>,
+    player_query: Query<(&Player, &Tank)>,
+    ctx: IcedContext<UiMessage>,
+) {
+    match state.mode {
+        utils::GameMode::Battle => view_battle_ui(state, player_query, ctx),
+        utils::GameMode::Shop => view_shop_ui(state, player_query, ctx),
+        utils::GameMode::StartMenu => view_startmenu_ui(state, player_query, ctx),
+    }
+}
 
 fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
