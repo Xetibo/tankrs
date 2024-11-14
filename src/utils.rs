@@ -34,10 +34,14 @@ pub enum GameMode {
     StartMenu,
 }
 
+// TODO move out to models
 #[derive(Resource)]
 pub struct GameState {
     pub firing: bool,
     pub mode: GameMode,
+    pub player_count: u32,
+    pub player_count_input: String,
+    pub player_count_parse_error: bool,
     pub wind: i32,
 }
 

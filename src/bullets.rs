@@ -66,6 +66,22 @@ impl BulletType {
         }
     }
 
+    pub fn get_cost(&self) -> u32 {
+        match self {
+            BulletType::RegularBullet => 0,
+            BulletType::FireBullet => 10,
+            BulletType::Nuke => 100,
+        }
+    }
+
+    pub fn get_max_count(&self) -> u32 {
+        match self {
+            BulletType::RegularBullet => u32::MAX,
+            BulletType::FireBullet => 20,
+            BulletType::Nuke => 3,
+        }
+    }
+
     pub fn init_bullets() -> HashMap<BulletType, BulletCount> {
         let mut map = HashMap::new();
         map.insert(BulletType::RegularBullet, BulletCount::Unlimited);
@@ -76,10 +92,26 @@ impl BulletType {
     }
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Copy)]
 pub enum BulletCount {
     Unlimited,
     Count(u32),
+}
+
+impl BulletCount {
+    pub fn increment(&self) -> BulletCount {
+        match self {
+            BulletCount::Unlimited => BulletCount::Unlimited,
+            BulletCount::Count(count) => BulletCount::Count(count + 1),
+        }
+    }
+
+    pub fn decrement(&self) -> BulletCount {
+        match self {
+            BulletCount::Unlimited => BulletCount::Unlimited,
+            BulletCount::Count(count) => BulletCount::Count(count - 1),
+        }
+    }
 }
 
 #[derive(Component)]
@@ -161,6 +193,13 @@ pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
 pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
                                    meshes: &mut ResMut<Assets<Mesh>>,
                                    materials: &mut ResMut<Assets<ColorMaterial>>,
+                                   // TODO investigate adding an eventwriter for desapwn event ->  this could instead
+                                   // be used to handle the state for triggering a new players turn
+                                   // ->  each player only fires once, but this bullet can spawn
+                                   // more bullets -> cluster.
+                                   // This despawn method can handle these effects by allowing per
+                                   // bullet overrides. The cluster can delegate the spawning of
+                                   // the event for later.
                                    _: &Res<AssetServer>,
                                    info: &BulletInfo| {
     let offset_origin = Vec3 {

@@ -15,7 +15,7 @@ use bevy_iced::{
 };
 
 use crate::{
-    bullets::{BulletInfo, BulletType},
+    bullets::{BulletCount, BulletInfo, BulletType},
     tank::Tank,
     utils::{get_current_player_props, GameMode, GameState, Player, ResetEvent},
     UiMessage,
@@ -75,6 +75,7 @@ pub fn view_battle_ui(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_battle_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
     mut commands: Commands,
@@ -126,6 +127,21 @@ pub fn update_battle_ui<'a>(
             }
             BattleMessage::Fire => {
                 // TODO deduplicate form inputs
+                let bullet_type = player.selected_bullet.0;
+                let count_type = *player
+                    .inventory
+                    .get(&bullet_type)
+                    .unwrap_or(&BulletCount::Count(0));
+                match count_type {
+                    BulletCount::Unlimited => (),
+                    BulletCount::Count(count) => {
+                        if count == 0 {
+                            return;
+                        } else {
+                            player.inventory.insert(bullet_type, count_type.decrement());
+                        }
+                    }
+                }
                 let info = BulletInfo {
                     direction: &tank.shooting_direction,
                     velocity: &tank.shooting_velocity,
@@ -148,7 +164,7 @@ pub fn update_battle_ui<'a>(
             }
             BattleMessage::SelectBullet(bullet) => {
                 let bullet_fn = bullet.get_bullet_from_type();
-                player.selected_bullet = (bullet.clone(), bullet_fn);
+                player.selected_bullet = (*bullet, bullet_fn);
             }
         }
     }
@@ -161,12 +177,8 @@ fn wrap(msg: BattleMessage) -> UiMessage {
 }
 
 fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
-    let options: Vec<BulletType> = player
-        .inventory
-        .keys()
-        .map(|elem| (*elem).clone())
-        .collect();
-    let selected = Some(player.selected_bullet.0.clone());
+    let options: Vec<BulletType> = player.inventory.keys().copied().collect();
+    let selected = Some(player.selected_bullet.0);
     column![bevy_iced::iced::widget::pick_list(
         options,
         selected,

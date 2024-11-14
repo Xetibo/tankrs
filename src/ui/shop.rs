@@ -1,24 +1,24 @@
 use bevy::{
-    asset::Assets,
-    prelude::{Commands, Entity, EventWriter, Mesh, Query, Res, ResMut, Transform},
-    sprite::{ColorMaterial, Sprite},
+    prelude::{Entity, Query, Transform},
+    sprite::Sprite,
 };
 use bevy_iced::{
     iced::{
-        alignment::{Horizontal, Vertical},
         widget::{button, column, container, row, text, Container},
-        Alignment, Background, Color, Theme,
+        Alignment, Theme,
     },
     IcedContext, Renderer,
 };
 use enum_iterator::all;
 
 use crate::{
-    bullets::BulletType,
+    bullets::{BulletCount, BulletType},
     tank::Tank,
-    utils::{GameMode, GameState, Player, ResetEvent},
+    utils::{GameMode, Player},
     UiMessage,
 };
+
+use super::utils::black_background::get_custom_container_style;
 
 #[derive(Clone, Copy)]
 pub enum ShopMessage {
@@ -26,33 +26,9 @@ pub enum ShopMessage {
     EndTurn,
 }
 
-pub struct BlackBackgroundContainer;
-
-impl container::StyleSheet for BlackBackgroundContainer {
-    type Style = bevy_iced::iced::Theme;
-
-    fn appearance(&self, style: &Self::Style) -> container::Appearance {
-        let palette = style.palette();
-        container::Appearance {
-            text_color: Some(palette.text),
-            background: Some(Background::Color(Color::BLACK)),
-            ..Default::default()
-        }
-    }
-}
-
-pub fn get_custom_container_style() -> bevy_iced::iced::theme::Container {
-    bevy_iced::iced::theme::Container::Custom(Box::new(BlackBackgroundContainer))
-}
-
 pub fn update_shop_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
-    mut commands: Commands,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
-    mut state: ResMut<GameState>,
-    mut reset_writer: EventWriter<ResetEvent>,
 ) {
     let msgs: Vec<&ShopMessage> = messages
         .filter_map(|val| match val {
@@ -60,40 +36,66 @@ pub fn update_shop_ui<'a>(
             _ => None,
         })
         .collect();
-    for msg in msgs {
-        match msg {
-            ShopMessage::BuyItem(bullet_type) => println!("bought {}", bullet_type),
-            ShopMessage::EndTurn => println!("end turn"),
+    let mut current_player_opt = None;
+    for (_, player, _, _, _) in &mut query {
+        if player.is_active {
+            current_player_opt = Some(player);
+        }
+    }
+    if let Some(mut player) = current_player_opt {
+        for msg in msgs {
+            match msg {
+                ShopMessage::BuyItem(bullet_type) => {
+                    let cost = bullet_type.get_cost();
+                    player.money -= cost;
+                    let old = *player
+                        .inventory
+                        .get(bullet_type)
+                        .unwrap_or(&BulletCount::Count(0));
+                    player.inventory.insert(*bullet_type, old.increment());
+                }
+                ShopMessage::EndTurn => println!("end turn"),
+            }
         }
     }
 }
 
-pub fn view_shop_ui(
-    state: Res<GameState>,
-    player_query: Query<(&Player, &Tank)>,
-    mut ctx: IcedContext<UiMessage>,
-) {
+pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMessage>) {
     let wrap = UiMessage::ShopMessage;
-    let (mut current_player_opt, mut player_tank_opt) = (None, None);
-    for (player, tank) in player_query.iter() {
+    let mut current_player_opt = None;
+    for (player, _) in player_query.iter() {
         if player.is_active {
             current_player_opt = Some(player);
-            player_tank_opt = Some(tank);
         }
     }
-    if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
+    if let Some(player) = current_player_opt {
+        let item_container = |elem: &BulletType| -> Option<Container<UiMessage, Theme, Renderer>> {
+            let current_count = player.inventory.get(elem).unwrap_or(&BulletCount::Count(0));
+            let cost = elem.get_cost();
+            let max_count = elem.get_max_count();
+            if let BulletCount::Count(count) = current_count {
+                Some(container(column![
+                    text(format!("Cost: {}, You currently have: {}", cost, count)),
+                    button("buy").on_press_maybe(if cost <= player.money {
+                        if *count < max_count {
+                            // TODO
+                            Some(wrap(ShopMessage::BuyItem(*elem)))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }),
+                ]))
+            } else {
+                None
+            }
+        };
         let battle_button =
             button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Battle));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
-        let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> = bullets
-            .iter()
-            .map(|elem| -> Container<UiMessage, Theme, Renderer> {
-                container(column![
-                    text(format!("Cost: {}", 10 /*TODO add cost*/)), /*button("buy").on_press(on_press)*/
-                    button("buy").on_press(wrap(ShopMessage::BuyItem(*elem))),
-                ])
-            })
-            .collect();
+        let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> =
+            bullets.iter().filter_map(item_container).collect();
         let mut bullet_container = column![];
         for bullet in bullet_items {
             bullet_container = bullet_container.push(bullet);
@@ -101,9 +103,7 @@ pub fn view_shop_ui(
         ctx.display(
             container(column![
                 row![battle_button, text("Hello")],
-                row![container(bullet_container)
-                    .align_x(Horizontal::Center)
-                    .align_y(Vertical::Top)]
+                row![container(bullet_container)].align_items(Alignment::Center)
             ])
             .padding(10)
             .width(1920)

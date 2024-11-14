@@ -21,8 +21,6 @@ use utils::{
     ResetEvent,
 };
 
-const PLAYER_COUNT: u32 = 2;
-
 pub mod bullets;
 pub mod inputs;
 pub mod tank;
@@ -47,7 +45,10 @@ fn main() {
         .add_event::<ResetEvent>()
         .insert_resource::<GameState>(GameState {
             firing: false,
-            mode: GameMode::Battle,
+            mode: GameMode::StartMenu,
+            player_count_input: "2".into(),
+            player_count: 2,
+            player_count_parse_error: false,
             wind: 0,
         })
         .add_systems(Startup, setup)
@@ -66,6 +67,7 @@ fn main() {
 #[derive(Component)]
 struct Wall {}
 
+#[allow(clippy::too_many_arguments)]
 pub fn update_ui(
     mut messages: EventReader<UiMessage>,
     commands: Commands,
@@ -92,24 +94,8 @@ pub fn update_ui(
             reset_writer,
             asset_server,
         ),
-        utils::GameMode::Shop => update_shop_ui(
-            new_messages,
-            commands,
-            materials,
-            meshes,
-            query,
-            state,
-            reset_writer,
-        ),
-        utils::GameMode::StartMenu => update_startmenu_ui(
-            new_messages,
-            commands,
-            materials,
-            meshes,
-            query,
-            state,
-            reset_writer,
-        ),
+        utils::GameMode::Shop => update_shop_ui(new_messages, query),
+        utils::GameMode::StartMenu => update_startmenu_ui(new_messages, state, reset_writer),
     }
 }
 
@@ -120,8 +106,8 @@ pub fn view_ui(
 ) {
     match state.mode {
         utils::GameMode::Battle => view_battle_ui(state, player_query, ctx),
-        utils::GameMode::Shop => view_shop_ui(state, player_query, ctx),
-        utils::GameMode::StartMenu => view_startmenu_ui(state, player_query, ctx),
+        utils::GameMode::Shop => view_shop_ui(player_query, ctx),
+        utils::GameMode::StartMenu => view_startmenu_ui(state, ctx),
     }
 }
 
@@ -226,6 +212,7 @@ fn setup(
 }
 
 fn reset_players(
+    state: Res<GameState>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     query: Query<(Entity, &Player)>,
@@ -235,17 +222,30 @@ fn reset_players(
         for (entity, _) in query.iter() {
             commands.entity(entity).despawn_recursive();
         }
-        for i in 0..PLAYER_COUNT {
+        for i in 0..state.player_count {
             commands.spawn(TankBundle {
                 sprite: SpriteBundle {
                     texture: asset_server.load("greentank_rechts.png"),
+                    transform: Transform {
+                        scale: Vec3 {
+                            x: 0.3333,
+                            y: 0.3333,
+                            z: 1.0,
+                        },
+                        translation: Vec3 {
+                            x: -200.0 + i as f32 * 150.0,
+                            y: -300.0,
+                            z: 1.0,
+                        },
+                        ..default()
+                    },
                     ..default()
                 },
                 tank: Tank {
                     blocked_direction: Vec2::default(),
                     scale: Vec3 {
-                        x: 300.0,
-                        y: 30.0,
+                        x: 100.0,
+                        y: 10.0,
                         z: 0.0,
                     },
                     // top right
@@ -357,6 +357,7 @@ fn bullet_collision(
 }
 
 fn swap_player(
+    state: Res<GameState>,
     mut reader: EventReader<EndTurnEvent>,
     mut players: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
 ) {
@@ -367,7 +368,7 @@ fn swap_player(
             return;
         };
         player.is_active = false;
-        let is_highest = player.player_number == PLAYER_COUNT - 1;
+        let is_highest = player.player_number == state.player_count - 1;
         let previous = player.player_number;
         for (_, mut player, _, _, _) in &mut players {
             if is_highest && player.player_number == 0 || player.player_number == previous + 1 {
