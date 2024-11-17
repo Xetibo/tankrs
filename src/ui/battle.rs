@@ -208,13 +208,14 @@ fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
     let current_velocity = player.fire_velocity;
     row![
         column![
-            text("Set Angle"),
+            text(format!("Angle: {}", current_angle)),
             slider(angle_range, current_angle, |val| wrap(
                 BattleMessage::SetAngle(val)
-            )),
+            ))
+            .step(0.01),
         ],
         column![
-            text("Set Velocity"),
+            text(format!("Velocity: {}", current_velocity)),
             slider(velocity_range, current_velocity, |val| wrap(
                 BattleMessage::SetVelocity(val)
             )),
@@ -227,9 +228,9 @@ fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
 fn info_box(wind: i32, player: &Player) -> impl Into<IcedElement> {
     // TODO display properly
     column![
-        text(format!("wind: {}", wind)),
+        text(format!("Wind: {}", wind)),
         text(format!("Player: {}", player.player_number)),
-        text(format!("health: {}", player.health)),
-        text(format!("health: {}", player.money)),
+        text(format!("Health: {}", player.health)),
+        text(format!("Money: {}", player.money)),
     ]
 }

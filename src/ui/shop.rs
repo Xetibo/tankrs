@@ -76,13 +76,9 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
             if let BulletCount::Count(count) = current_count {
                 Some(container(column![
                     text(format!("Cost: {}, You currently have: {}", cost, count)),
-                    button("buy").on_press_maybe(if cost <= player.money {
-                        if *count < max_count {
-                            // TODO
-                            Some(wrap(ShopMessage::BuyItem(*elem)))
-                        } else {
-                            None
-                        }
+                    button("buy").on_press_maybe(if cost <= player.money && *count < max_count {
+                        // TODO
+                        Some(wrap(ShopMessage::BuyItem(*elem)))
                     } else {
                         None
                     }),
@@ -92,7 +88,7 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
             }
         };
         let battle_button =
-            button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Battle));
+            button(text("confirm")).on_press(UiMessage::SetSceneMessage(GameMode::Battle));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
         let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> =
             bullets.iter().filter_map(item_container).collect();
@@ -102,12 +98,21 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
         }
         ctx.display(
             container(column![
-                row![battle_button, text("Hello")],
-                row![container(bullet_container)].align_items(Alignment::Center)
+                row![battle_button].padding(5),
+                column![
+                    text(format!("Player: {}", player.player_number)),
+                    text(format!("Money: {}", player.money))
+                ]
+                .padding(5),
+                row![container(bullet_container)]
+                    .align_items(Alignment::Center)
+                    .padding(5)
             ])
             .padding(10)
             .width(1920)
             .height(1080)
+            .center_x()
+            .center_y()
             .style(get_custom_container_style()),
         )
     }
