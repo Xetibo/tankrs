@@ -21,6 +21,8 @@ pub struct KeyMap {
     aim_right: Rc<RefCell<KeyCode>>,
     fire: Rc<RefCell<KeyCode>>,
     switch_bullet: Rc<RefCell<KeyCode>>,
+    velocity_up: Rc<RefCell<KeyCode>>,
+    velocity_down: Rc<RefCell<KeyCode>>,
 }
 
 unsafe impl Send for KeyMap {}
@@ -35,6 +37,8 @@ impl KeyMap {
             aim_right: Rc::new(RefCell::new(KeyCode::KeyD)),
             fire: Rc::new(RefCell::new(KeyCode::Space)),
             switch_bullet: Rc::new(RefCell::new(KeyCode::ShiftLeft)),
+            velocity_up: Rc::new(RefCell::new(KeyCode::KeyQ)),
+            velocity_down: Rc::new(RefCell::new(KeyCode::KeyE)),
         }
     }
 }
@@ -68,15 +72,22 @@ pub fn handle_keypress(
         writer.send(wrap(BattleMessage::MoveLeft));
     }
 
-    let current = tank.shooting_direction.get();
+    let current_angle = tank.shooting_direction.get();
+    let current_velocity = player.fire_velocity;
     if keys.pressed(*player.key_map.aim_right.borrow()) {
-        writer.send(wrap(BattleMessage::SetAngle(current - 0.01)));
+        writer.send(wrap(BattleMessage::SetAngle(current_angle - 0.01)));
     }
     if keys.pressed(*player.key_map.aim_left.borrow()) {
-        writer.send(wrap(BattleMessage::SetAngle(current + 0.01)));
+        writer.send(wrap(BattleMessage::SetAngle(current_angle + 0.01)));
     }
     if keys.just_released(*player.key_map.fire.borrow()) {
         writer.send(wrap(BattleMessage::Fire));
+    }
+    if keys.just_released(*player.key_map.velocity_up.borrow()) {
+        writer.send(wrap(BattleMessage::SetVelocity(current_velocity + 0.1)));
+    }
+    if keys.just_released(*player.key_map.velocity_down.borrow()) {
+        writer.send(wrap(BattleMessage::SetVelocity(current_velocity - 0.1)));
     }
     if keys.pressed(*player.key_map.switch_bullet.borrow()) {
         let previous_bullet = player.selected_bullet.0.get_int_value();

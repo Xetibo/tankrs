@@ -14,6 +14,12 @@ use crate::{
 };
 
 #[derive(Event)]
+pub struct PlayerKillEvent {
+    pub killer: u32,
+    pub killed: u32,
+}
+
+#[derive(Event)]
 pub struct FireEvent {}
 
 #[derive(Event)]
@@ -42,7 +48,7 @@ pub struct GameState {
     pub player_count: u32,
     pub player_count_input: String,
     pub player_count_parse_error: bool,
-    pub wind: i32,
+    pub wind: f32,
 }
 
 pub type BulletFn = fn(
@@ -67,12 +73,12 @@ pub struct Player {
     pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
     pub selected_bullet: BulletTypeAndFn,
-    pub health: u32,
+    pub health: i32,
     pub fuel: u32,
     pub money: u32,
     pub key_map: KeyMap,
     pub is_active: bool,
-    pub fire_velocity: u32,
+    pub fire_velocity: f32,
 }
 
 impl Player {
@@ -119,4 +125,8 @@ pub fn get_current_player_props<'a>(
     } else {
         None
     }
+}
+
+pub fn random_wind() -> f32 {
+    rand::random::<f32>().clamp(-0.3, 0.3)
 }

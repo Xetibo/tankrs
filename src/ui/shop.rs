@@ -1,5 +1,5 @@
 use bevy::{
-    prelude::{Entity, Query, Transform},
+    prelude::{Entity, EventWriter, Query, Transform},
     sprite::Sprite,
 };
 use bevy_iced::{
@@ -14,7 +14,7 @@ use enum_iterator::all;
 use crate::{
     bullets::{BulletCount, BulletType},
     tank::Tank,
-    utils::{GameMode, Player},
+    utils::{EndTurnEvent, Player},
     UiMessage,
 };
 
@@ -29,6 +29,7 @@ pub enum ShopMessage {
 pub fn update_shop_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+    mut end_turn_writer: EventWriter<EndTurnEvent>,
 ) {
     let msgs: Vec<&ShopMessage> = messages
         .filter_map(|val| match val {
@@ -54,7 +55,9 @@ pub fn update_shop_ui<'a>(
                         .unwrap_or(&BulletCount::Count(0));
                     player.inventory.insert(*bullet_type, old.increment());
                 }
-                ShopMessage::EndTurn => println!("end turn"),
+                ShopMessage::EndTurn => {
+                    end_turn_writer.send(EndTurnEvent {});
+                }
             }
         }
     }
@@ -77,7 +80,6 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
                 Some(container(column![
                     text(format!("Cost: {}, You currently have: {}", cost, count)),
                     button("buy").on_press_maybe(if cost <= player.money && *count < max_count {
-                        // TODO
                         Some(wrap(ShopMessage::BuyItem(*elem)))
                     } else {
                         None
@@ -87,8 +89,7 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
                 None
             }
         };
-        let battle_button =
-            button(text("confirm")).on_press(UiMessage::SetSceneMessage(GameMode::Battle));
+        let battle_button = button(text("confirm")).on_press(wrap(ShopMessage::EndTurn));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
         let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> =
             bullets.iter().filter_map(item_container).collect();
@@ -109,8 +110,8 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
                     .padding(5)
             ])
             .padding(10)
-            .width(1920)
-            .height(1080)
+            .width(5000)
+            .height(5000)
             .center_x()
             .center_y()
             .style(get_custom_container_style()),

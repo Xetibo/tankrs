@@ -65,8 +65,8 @@ pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>)
     ctx.display(
         container(column![title, input, start_button])
             .padding(10)
-            .width(1920)
-            .height(1080)
+            .width(5000)
+            .height(5000)
             .style(get_custom_container_style()),
     )
 }

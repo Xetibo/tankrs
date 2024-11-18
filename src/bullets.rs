@@ -10,7 +10,7 @@ use bevy::{
 };
 use enum_iterator::Sequence;
 
-use crate::{tank::Angle, utils::BulletFn};
+use crate::utils::BulletFn;
 
 #[derive(Component)]
 pub struct BulletCollider {}
@@ -118,9 +118,9 @@ impl BulletCount {
 pub struct Bullet {
     pub velocity_shot: Vec2,
     pub velocity_gravity: Vec2,
-    pub direction: Angle,
     pub damage: u32,
     pub radius: u32,
+    pub owner: u32,
 }
 
 #[derive(Bundle)]
@@ -136,17 +136,17 @@ pub struct BulletSpriteBundle {
 }
 
 pub struct BulletInfo<'a> {
-    pub direction: &'a Angle,
     pub velocity: &'a Vec2,
     pub origin: &'a Vec3,
+    pub owner: u32,
 }
 
 impl<'a> BulletInfo<'a> {
-    pub fn new(direction: &'a Angle, velocity: &'a Vec2, origin: &'a Vec3) -> Self {
+    pub fn new(velocity: &'a Vec2, origin: &'a Vec3, owner: u32) -> Self {
         Self {
-            direction,
             velocity,
             origin,
+            owner,
         }
     }
 }
@@ -166,10 +166,10 @@ pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
             bullet: Bullet {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                direction: *info.direction,
                 // TODO implement
                 damage: 10,
                 radius: 10,
+                owner: info.owner,
             },
             mesh_bundle: MaterialMesh2dBundle {
                 mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
@@ -212,10 +212,10 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
             bullet: Bullet {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                direction: *info.direction,
                 // TODO implement
                 damage: 10,
                 radius: 10,
+                owner: info.owner,
             },
             mesh_bundle: MaterialMesh2dBundle {
                 mesh: Mesh2dHandle(meshes.add(Circle { radius: 2.0 })),
@@ -251,10 +251,10 @@ pub const NUKE: BulletFn = |commands: &mut Commands,
             bullet: Bullet {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                direction: *info.direction,
                 // TODO implement
                 damage: 10,
                 radius: 10,
+                owner: info.owner,
             },
             sprite_bundle: SpriteBundle {
                 texture: asset_server.load("../assets/nuke.gif"),

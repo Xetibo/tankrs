@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 
 use bevy::{
     asset::{AssetServer, Assets},
+    math::Vec2,
     prelude::{Commands, Entity, EventWriter, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
 };
@@ -27,7 +28,7 @@ pub enum BattleMessage {
     MoveRight,
     MoveLeft,
     Fire,
-    SetVelocity(u32),
+    SetVelocity(f32),
     SetAngle(f32),
     SelectBullet(BulletType),
     // UseRepair,
@@ -118,15 +119,14 @@ pub fn update_battle_ui<'a>(
                 reset_writer.send(ResetEvent {});
             }
             BattleMessage::MoveRight => {
-                // TODO deduplicate form inputs
+                player.fuel -= 10;
                 transform.translation.x += 10.0;
             }
             BattleMessage::MoveLeft => {
-                // TODO deduplicate form inputs
+                player.fuel -= 10;
                 transform.translation.x -= 10.0;
             }
             BattleMessage::Fire => {
-                // TODO deduplicate form inputs
                 let bullet_type = player.selected_bullet.0;
                 let count_type = *player
                     .inventory
@@ -142,10 +142,14 @@ pub fn update_battle_ui<'a>(
                         }
                     }
                 }
+                let angle = &tank.shooting_direction.get();
                 let info = BulletInfo {
-                    direction: &tank.shooting_direction,
-                    velocity: &tank.shooting_velocity,
+                    velocity: &Vec2 {
+                        x: (180.0 - angle).cos() * player.fire_velocity,
+                        y: (180.0 - angle).sin() * player.fire_velocity,
+                    },
                     origin: &transform.translation,
+                    owner: player.player_number,
                 };
                 (player.selected_bullet.1)(
                     &mut commands,
@@ -188,6 +192,7 @@ fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
 
 fn fuel(player: &Player) -> impl Into<IcedElement> {
     row![
+        // TODO make this work continuously
         button(text("left"))
             .on_press(wrap(BattleMessage::MoveLeft))
             .padding(5),
@@ -200,15 +205,17 @@ fn fuel(player: &Player) -> impl Into<IcedElement> {
 }
 
 fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
-    // TODO deduplicate
     let angle_range = RangeInclusive::new(0.0, f32::consts::PI);
     let current_angle = tank.shooting_direction.get();
 
-    let velocity_range = RangeInclusive::new(0, 100);
+    let velocity_range = RangeInclusive::new(0.0, 10.0);
     let current_velocity = player.fire_velocity;
     row![
         column![
-            text(format!("Angle: {}", current_angle)),
+            text(format!(
+                "Angle: {}",
+                current_angle * 180.0 / f32::consts::PI
+            )),
             slider(angle_range, current_angle, |val| wrap(
                 BattleMessage::SetAngle(val)
             ))
@@ -218,14 +225,15 @@ fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
             text(format!("Velocity: {}", current_velocity)),
             slider(velocity_range, current_velocity, |val| wrap(
                 BattleMessage::SetVelocity(val)
-            )),
+            ))
+            .step(0.1),
         ],
         button(text("fire")).on_press(wrap(BattleMessage::Fire)),
     ]
     .spacing(10)
 }
 
-fn info_box(wind: i32, player: &Player) -> impl Into<IcedElement> {
+fn info_box(wind: f32, player: &Player) -> impl Into<IcedElement> {
     // TODO display properly
     column![
         text(format!("Wind: {}", wind)),
