@@ -19,7 +19,7 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletCount, BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, GameMode, GameState, Player, ResetEvent},
+    utils::{get_current_player_props, GameState, Player, ResetEvent},
     UiMessage,
 };
 
@@ -49,8 +49,6 @@ pub fn view_battle_ui(
     mut ctx: IcedContext<UiMessage>,
 ) {
     let reset_button = button(text("Reset")).on_press(wrap(BattleMessage::Reset));
-    // TODO remove later -> shop shown at the end of the game
-    let shop_button = button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Shop));
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
         if state.active_player == player.player_number {
@@ -59,11 +57,19 @@ pub fn view_battle_ui(
         }
     }
     if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
+        let current_bullet = player.selected_bullet.0;
+        let current_bullet_count_opt = player.inventory.get(&current_bullet);
+        let current_bullet_count_str =
+            if let Some(BulletCount::Count(count)) = current_bullet_count_opt {
+                format!("{}", count)
+            } else {
+                "unlimited".into()
+            };
         ctx.display(
             row![
-                shop_button,
                 reset_button,
                 bullet_picker(player).into(),
+                text(current_bullet_count_str),
                 fuel(player).into(),
                 firing(player, tank).into(),
                 info_box(state.wind, player).into()
@@ -128,7 +134,6 @@ pub fn update_battle_ui<'a>(
                 transform.translation.x -= player.drive(10) * delta;
             }
             BattleMessage::Fire => {
-                state.firing = true;
                 let bullet_type = player.selected_bullet.0;
                 let count_type = *player
                     .inventory
@@ -156,6 +161,7 @@ pub fn update_battle_ui<'a>(
                 };
                 (player.selected_bullet.1)(
                     &mut commands,
+                    &mut state,
                     &mut meshes,
                     &mut materials,
                     &asset_server,

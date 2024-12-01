@@ -1,7 +1,7 @@
 use core::f32;
 
 use bevy::{
-    math::Vec2,
+    math::{Vec2, Vec3},
     prelude::{Bundle, Component},
     sprite::SpriteBundle,
 };
@@ -15,7 +15,9 @@ pub struct Angle {
 
 impl Default for Angle {
     fn default() -> Self {
-        Angle { value: 1.5 }
+        Angle {
+            value: f32::consts::FRAC_PI_2,
+        }
     }
 }
 
@@ -58,6 +60,21 @@ pub struct Tank {
     pub shooting_direction: Angle,
     pub shooting_velocity: Vec2,
     pub(crate) scale: bevy::prelude::Vec3,
+}
+
+impl Default for Tank {
+    fn default() -> Tank {
+        Tank {
+            blocked_direction: Vec2::default(),
+            scale: Vec3 {
+                x: 100.0,
+                y: 10.0,
+                z: 0.0,
+            },
+            shooting_direction: Angle::default(),
+            shooting_velocity: Vec2::new(1.0, 1.0),
+        }
+    }
 }
 
 #[derive(Bundle)]

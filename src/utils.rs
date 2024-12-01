@@ -1,3 +1,5 @@
+use std::{rc::Rc, sync::Arc};
+
 use bevy::{
     asset::{AssetServer, Assets},
     prelude::{
@@ -8,7 +10,7 @@ use bevy::{
 };
 
 use crate::{
-    bullets::{BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
+    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
     inputs::KeyMap,
     tank::Tank,
 };
@@ -78,6 +80,7 @@ impl Default for GameState {
 
 pub type BulletFn = fn(
     &mut Commands,
+    &mut ResMut<GameState>,
     &mut ResMut<Assets<Mesh>>,
     &mut ResMut<Assets<ColorMaterial>>,
     &Res<AssetServer>,
@@ -97,7 +100,7 @@ pub type PlayerProps<'a> = Option<(
 pub struct Player {
     pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
-    pub selected_bullet: BulletTypeAndFn,
+    pub selected_bullet: Arc<dyn Bullet>,
     pub health: i32,
     pub fuel: u32,
     pub money: u32,

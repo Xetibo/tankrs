@@ -1,7 +1,6 @@
 use core::f32;
 
 use bevy::{
-    math::Vec2,
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
@@ -186,24 +185,14 @@ fn reset_players(
                         },
                         translation: Vec3 {
                             x: -200.0 + i as f32 * 150.0,
-                            y: -300.0,
+                            y: -150.0,
                             z: 1.0,
                         },
                         ..default()
                     },
                     ..default()
                 },
-                tank: Tank {
-                    blocked_direction: Vec2::default(),
-                    scale: Vec3 {
-                        x: 100.0,
-                        y: 10.0,
-                        z: 0.0,
-                    },
-                    // top right
-                    shooting_direction: tank::Angle::default(),
-                    shooting_velocity: Vec2::new(1.0, 1.0),
-                },
+                tank: Tank::default(),
                 player: Player::from_previous_or_initial(i, previous_player_states.get(i as usize)),
             });
         }
@@ -288,12 +277,12 @@ fn bullet_collision(
         state.firing = false;
         writer.send(EndTurnEvent {});
     }
-    for (entity, bullet, bullet_transform) in &bullets {
+    for (bullet_entity, bullet, bullet_transform) in &bullets {
         for (_, _) in &walls {
             if bullet_transform.translation.y
                 < polynomial(bullet_transform.translation.x as i32, 0.5) - 650.0
             {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(bullet_entity).despawn_recursive();
             }
         }
         for (tank_entity, mut player, tank, tank_transform) in &mut query {
@@ -313,6 +302,7 @@ fn bullet_collision(
                     });
                     commands.entity(tank_entity).despawn_recursive();
                 }
+                commands.entity(bullet_entity).despawn_recursive();
             }
         }
     }

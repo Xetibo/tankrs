@@ -4,13 +4,16 @@ use bevy::{
     asset::{AssetServer, Assets},
     color::Color,
     math::{Vec2, Vec3},
-    prelude::{default, Bundle, Circle, Commands, Component, Mesh, Res, ResMut, Transform},
+    prelude::{
+        default, Bundle, Circle, Commands, Component, DespawnRecursiveExt, Entity, Mesh, Res,
+        ResMut, Transform,
+    },
     sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle, SpriteBundle},
     utils::HashMap,
 };
 use enum_iterator::Sequence;
 
-use crate::utils::BulletFn;
+use crate::utils::{BulletFn, GameState};
 
 #[derive(Component)]
 pub struct BulletCollider {}
@@ -114,8 +117,25 @@ impl BulletCount {
     }
 }
 
+pub trait Bullet: Component + Sized {
+    fn entity(&self) -> Option<Entity>;
+    fn fire(
+        &mut self,
+        commands: &mut Commands,
+        state: &mut ResMut<GameState>,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<ColorMaterial>>,
+        _: &Res<AssetServer>,
+        info: &BulletInfo,
+    );
+    fn ground_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>);
+    fn player_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>);
+    // TODO needed?
+    //pub fn destruct();
+}
+
 #[derive(Component)]
-pub struct Bullet {
+pub struct BulletEntity {
     pub velocity_shot: Vec2,
     pub velocity_gravity: Vec2,
     pub damage: u32,
@@ -125,13 +145,13 @@ pub struct Bullet {
 
 #[derive(Bundle)]
 pub struct BulletMeshBundle {
-    pub bullet: Bullet,
+    pub bullet: BulletEntity,
     pub mesh_bundle: MaterialMesh2dBundle<ColorMaterial>,
 }
 
 #[derive(Bundle)]
 pub struct BulletSpriteBundle {
-    pub bullet: Bullet,
+    pub bullet: BulletEntity,
     pub sprite_bundle: SpriteBundle,
 }
 
@@ -151,46 +171,87 @@ impl<'a> BulletInfo<'a> {
     }
 }
 
-pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
-                                     meshes: &mut ResMut<Assets<Mesh>>,
-                                     materials: &mut ResMut<Assets<ColorMaterial>>,
-                                     _: &Res<AssetServer>,
-                                     info: &BulletInfo| {
-    let offset_origin = Vec3 {
-        x: info.origin.x,
-        y: info.origin.y + 20.0,
-        z: 0.0,
-    };
-    commands.spawn((
-        BulletMeshBundle {
-            bullet: Bullet {
-                velocity_shot: *info.velocity,
-                velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                // TODO implement
-                damage: 10,
-                radius: 10,
-                owner: info.owner,
-            },
-            mesh_bundle: MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
-                material: materials.add(Color::BLACK),
-                transform: Transform {
-                    translation: offset_origin,
-                    scale: Vec3 {
-                        x: 10.0,
-                        y: 10.0,
-                        z: 1.0,
+#[derive(Component)]
+pub struct NormalBullet {
+    bullet: BulletEntity,
+    entity_id: Option<Entity>,
+}
+
+impl Bullet for NormalBullet {
+    fn fire(
+        &mut self,
+        commands: &mut Commands,
+        state: &mut ResMut<GameState>,
+        meshes: &mut ResMut<Assets<Mesh>>,
+        materials: &mut ResMut<Assets<ColorMaterial>>,
+        _: &Res<AssetServer>,
+        info: &BulletInfo,
+    ) {
+        let offset_origin = Vec3 {
+            x: info.origin.x,
+            y: info.origin.y + 20.0,
+            z: 0.0,
+        };
+        let entity = commands.spawn((
+            BulletMeshBundle {
+                bullet: BulletEntity {
+                    velocity_shot: *info.velocity,
+                    velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
+                    // TODO implement
+                    damage: 10,
+                    radius: 10,
+                    owner: info.owner,
+                },
+                mesh_bundle: MaterialMesh2dBundle {
+                    mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
+                    material: materials.add(Color::BLACK),
+                    transform: Transform {
+                        translation: offset_origin,
+                        scale: Vec3 {
+                            x: 10.0,
+                            y: 10.0,
+                            z: 1.0,
+                        },
+                        ..default()
                     },
                     ..default()
                 },
-                ..default()
             },
-        },
-        BulletType::RegularBullet,
-    ));
-};
+            BulletType::RegularBullet,
+        ));
+        self.entity_id = Some(entity.id());
+        state.firing = true;
+    }
+
+    fn ground_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>) {
+        state.firing = false;
+        let entity_opt = self.entity();
+        if let Some(entity) = entity_opt {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+
+    fn player_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>) {
+        state.firing = false;
+        let entity_opt = self.entity();
+        if let Some(entity) = entity_opt {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+
+    fn entity(&self) -> Option<Entity> {
+        self.entity_id
+    }
+}
+pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
+                                     state: &mut ResMut<GameState>,
+                                     meshes: &mut ResMut<Assets<Mesh>>,
+                                     materials: &mut ResMut<Assets<ColorMaterial>>,
+                                     _: &Res<AssetServer>,
+                                     info: &BulletInfo| {};
 
 pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
+                                   state: &mut ResMut<GameState>,
                                    meshes: &mut ResMut<Assets<Mesh>>,
                                    materials: &mut ResMut<Assets<ColorMaterial>>,
                                    // TODO investigate adding an eventwriter for desapwn event ->  this could instead
@@ -209,7 +270,7 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
     };
     commands.spawn((
         BulletMeshBundle {
-            bullet: Bullet {
+            bullet: BulletEntity {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
                 // TODO implement
@@ -234,9 +295,11 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
         },
         BulletType::FireBullet,
     ));
+    state.firing = true;
 };
 
 pub const NUKE: BulletFn = |commands: &mut Commands,
+                            state: &mut ResMut<GameState>,
                             _: &mut ResMut<Assets<Mesh>>,
                             _: &mut ResMut<Assets<ColorMaterial>>,
                             asset_server: &Res<AssetServer>,
@@ -248,7 +311,7 @@ pub const NUKE: BulletFn = |commands: &mut Commands,
     };
     commands.spawn((
         BulletSpriteBundle {
-            bullet: Bullet {
+            bullet: BulletEntity {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
                 // TODO implement
@@ -267,4 +330,6 @@ pub const NUKE: BulletFn = |commands: &mut Commands,
         },
         BulletType::Nuke,
     ));
+    state.firing = true;
+    // TODO add callback for destruction
 };
