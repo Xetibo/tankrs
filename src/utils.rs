@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use crate::{
-    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
+    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NormalBullet, NORMAL_BULLET},
     inputs::KeyMap,
     tank::Tank,
 };
@@ -109,8 +109,8 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn selected_bullet(&self) -> BulletFn {
-        self.selected_bullet.1
+    pub fn selected_bullet(&self) -> Arc<dyn Bullet> {
+        self.selected_bullet.clone()
     }
 
     /// Returns the x axis change according to fuel used
@@ -139,7 +139,7 @@ impl Player {
             fuel: 1000,
             money,
             key_map: KeyMap::default_keymap(),
-            selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+            selected_bullet: NormalBullet::new(),
             fire_velocity: 1.0,
         }
     }

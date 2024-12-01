@@ -1,4 +1,4 @@
-use std::{fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash, sync::Arc};
 
 use bevy::{
     asset::{AssetServer, Assets},
@@ -117,8 +117,10 @@ impl BulletCount {
     }
 }
 
-pub trait Bullet: Component + Sized {
+pub trait Bullet: Send + Sync + 'static {
     fn entity(&self) -> Option<Entity>;
+    fn bullet_info(&self, info: &BulletInfo) -> BulletEntity;
+    fn bullet_type(&self) -> BulletType;
     fn fire(
         &mut self,
         commands: &mut Commands,
@@ -173,8 +175,17 @@ impl<'a> BulletInfo<'a> {
 
 #[derive(Component)]
 pub struct NormalBullet {
-    bullet: BulletEntity,
     entity_id: Option<Entity>,
+    bullet_type: BulletType,
+}
+
+impl NormalBullet {
+    pub fn new() -> Arc<NormalBullet> {
+        Arc::new(NormalBullet {
+            entity_id: None,
+            bullet_type: BulletType::RegularBullet,
+        })
+    }
 }
 
 impl Bullet for NormalBullet {
@@ -239,8 +250,23 @@ impl Bullet for NormalBullet {
         }
     }
 
+    fn bullet_info(&self, info: &BulletInfo) -> BulletEntity {
+        BulletEntity {
+            velocity_shot: *info.velocity,
+            velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
+            // TODO implement
+            damage: 10,
+            radius: 10,
+            owner: info.owner,
+        }
+    }
+
     fn entity(&self) -> Option<Entity> {
         self.entity_id
+    }
+
+    fn bullet_type(&self) -> BulletType {
+        self.bullet_type
     }
 }
 pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,

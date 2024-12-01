@@ -8,7 +8,7 @@ use bevy::{
 };
 
 use bevy_iced::{IcedContext, IcedPlugin};
-use bullets::{Bullet, BulletCount, BulletType};
+use bullets::{BulletCount, BulletEntity, BulletType};
 use inputs::handle_keypress;
 use tank::{Tank, TankBundle};
 use ui::{
@@ -202,7 +202,7 @@ fn reset_players(
 fn move_bullets(
     time: Res<Time>,
     state: Res<GameState>,
-    mut query: Query<(&mut Bullet, &mut Transform)>,
+    mut query: Query<(&mut BulletEntity, &mut Transform)>,
 ) {
     let delta = time.delta_seconds();
     for (mut bullet, mut transform) in &mut query {
@@ -267,7 +267,7 @@ fn collision_handler(
 fn bullet_collision(
     mut commands: Commands,
     mut state: ResMut<GameState>,
-    bullets: Query<(Entity, &mut Bullet, &Transform)>,
+    bullets: Query<(Entity, &mut BulletEntity, &Transform)>,
     walls: Query<(&Wall, &Transform)>,
     mut query: Query<(Entity, &mut Player, &Tank, &Transform)>,
     mut writer: EventWriter<EndTurnEvent>,

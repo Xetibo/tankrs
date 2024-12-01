@@ -57,7 +57,7 @@ pub fn view_battle_ui(
         }
     }
     if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
-        let current_bullet = player.selected_bullet.0;
+        let current_bullet = player.selected_bullet.bullet_type();
         let current_bullet_count_opt = player.inventory.get(&current_bullet);
         let current_bullet_count_str =
             if let Some(BulletCount::Count(count)) = current_bullet_count_opt {
@@ -134,7 +134,7 @@ pub fn update_battle_ui<'a>(
                 transform.translation.x -= player.drive(10) * delta;
             }
             BattleMessage::Fire => {
-                let bullet_type = player.selected_bullet.0;
+                let bullet_type = player.selected_bullet.bullet_type();
                 let count_type = *player
                     .inventory
                     .get(&bullet_type)
@@ -159,7 +159,8 @@ pub fn update_battle_ui<'a>(
                     origin: &transform.translation,
                     owner: player.player_number,
                 };
-                (player.selected_bullet.1)(
+
+                player.selected_bullet.fire(
                     &mut commands,
                     &mut state,
                     &mut meshes,
@@ -175,8 +176,9 @@ pub fn update_battle_ui<'a>(
                 tank.shooting_direction.set(*angle);
             }
             BattleMessage::SelectBullet(bullet) => {
-                let bullet_fn = bullet.get_bullet_from_type();
-                player.selected_bullet = (*bullet, bullet_fn);
+                // TODO reimplement
+                //let bullet_fn = bullet.get_bullet_from_type();
+                //player.selected_bullet = (*bullet, bullet_fn);
             }
         }
     }
