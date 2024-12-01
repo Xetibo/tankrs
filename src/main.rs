@@ -5,11 +5,12 @@ use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    utils::HashMap,
 };
 
 use bevy_iced::{IcedContext, IcedPlugin};
-use bullets::{Bullet, BulletType, NORMAL_BULLET};
-use inputs::{handle_keypress, KeyMap};
+use bullets::{Bullet, BulletCount, BulletType};
+use inputs::handle_keypress;
 use tank::{Tank, TankBundle};
 use ui::{
     battle::{update_battle_ui, view_battle_ui, BattleMessage},
@@ -44,14 +45,7 @@ fn main() {
         .add_event::<EndTurnEvent>()
         .add_event::<ResetEvent>()
         .add_event::<PlayerKillEvent>()
-        .insert_resource::<GameState>(GameState {
-            firing: false,
-            mode: GameMode::StartMenu,
-            player_count_input: "2".into(),
-            player_count: 2,
-            player_count_parse_error: false,
-            wind: random_wind(),
-        })
+        .insert_resource::<GameState>(GameState::default())
         .add_systems(Startup, setup)
         .add_systems(Update, update_ui)
         .add_systems(Update, reset_players)
@@ -72,6 +66,7 @@ struct Wall {}
 #[allow(clippy::too_many_arguments)]
 pub fn update_ui(
     mut messages: EventReader<UiMessage>,
+    time: Res<Time>,
     commands: Commands,
     materials: ResMut<Assets<ColorMaterial>>,
     meshes: ResMut<Assets<Mesh>>,
@@ -89,6 +84,7 @@ pub fn update_ui(
     match state.mode {
         utils::GameMode::Battle => update_battle_ui(
             new_messages,
+            time,
             commands,
             materials,
             meshes,
@@ -97,7 +93,7 @@ pub fn update_ui(
             reset_writer,
             asset_server,
         ),
-        utils::GameMode::Shop => update_shop_ui(new_messages, query, end_turn_writer),
+        utils::GameMode::Shop => update_shop_ui(new_messages, state, query, end_turn_writer),
         utils::GameMode::StartMenu => update_startmenu_ui(new_messages, state, reset_writer),
     }
 }
@@ -109,7 +105,7 @@ pub fn view_ui(
 ) {
     match state.mode {
         utils::GameMode::Battle => view_battle_ui(state, player_query, ctx),
-        utils::GameMode::Shop => view_shop_ui(player_query, ctx),
+        utils::GameMode::Shop => view_shop_ui(state, player_query, ctx),
         utils::GameMode::StartMenu => view_startmenu_ui(state, ctx),
     }
 }
@@ -123,6 +119,7 @@ fn setup(
     let rand: f32 = 0.5;
     let mut vertices = Vec::new();
     let mut i = -1920;
+    // TODO make this use a proper curve
     for _ in -1920..1920 {
         vertices.push([i as f32, 0.0, 0.0]);
         let two = [i as f32, polynomial(i, rand), 0.0];
@@ -171,7 +168,10 @@ fn reset_players(
 ) {
     if reader.read().next().is_some() {
         state.wind = random_wind();
-        for (entity, _) in query.iter() {
+        state.active_player = 0;
+        let mut previous_player_states = Vec::<(u32, HashMap<BulletType, BulletCount>)>::new();
+        for (entity, player) in query.iter() {
+            previous_player_states.push((player.money, player.inventory.clone()));
             commands.entity(entity).despawn_recursive();
         }
         for i in 0..state.player_count {
@@ -204,17 +204,7 @@ fn reset_players(
                     shooting_direction: tank::Angle::default(),
                     shooting_velocity: Vec2::new(1.0, 1.0),
                 },
-                player: Player {
-                    player_number: i,
-                    inventory: BulletType::init_bullets(),
-                    health: 100,
-                    fuel: 100,
-                    money: 0,
-                    key_map: KeyMap::default_keymap(),
-                    selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
-                    is_active: i == 0,
-                    fire_velocity: 1.0,
-                },
+                player: Player::from_previous_or_initial(i, previous_player_states.get(i as usize)),
             });
         }
     }
@@ -225,8 +215,8 @@ fn move_bullets(
     state: Res<GameState>,
     mut query: Query<(&mut Bullet, &mut Transform)>,
 ) {
+    let delta = time.delta_seconds();
     for (mut bullet, mut transform) in &mut query {
-        let delta = time.delta_seconds();
         let wind = state.wind;
 
         // s0 + v0 + 0.5 * a * t * t
@@ -240,7 +230,11 @@ fn move_bullets(
         // x
         transform.translation.x =
             transform.translation.x + bullet.velocity_shot.x + 0.5 * wind * delta * delta;
-        bullet.velocity_shot.x = (delta * wind + bullet.velocity_shot.x).clamp(0.0, 1000.0);
+        //if bullet.velocity_shot.x > 0.0 {
+        //    bullet.velocity_shot.x = (/*delta * wind +*/bullet.velocity_shot.x).clamp(0.0, 1000.0);
+        //} else {
+        //    bullet.velocity_shot.x = (/*delta * wind +*/bullet.velocity_shot.x).clamp(-1000.0, 0.0);
+        //}
 
         // TODO do we want air resistance?
         //if bullet.velocity_shot.x > 0.0 {
@@ -343,36 +337,22 @@ fn swap_player(
     mut reset_writer: EventWriter<ResetEvent>,
     mut players: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
 ) {
-    let mut end_game = false;
     if state.mode == GameMode::Battle && players.iter().len() < 2 {
         ui_writer.send(UiMessage::SetSceneMessage(GameMode::Shop));
         reset_writer.send(ResetEvent {});
-        end_game = true;
+        state.firing = false;
     }
     for _ in reader.read() {
         state.wind = random_wind();
-        let (_, mut player, _, _, _) = if let Some(props) = get_current_player_props(&mut players) {
-            props
-        } else {
-            return;
-        };
+        let (_, player, _, _, _) =
+            if let Some(props) = get_current_player_props(state.active_player, &mut players) {
+                props
+            } else {
+                return;
+            };
         if state.mode == GameMode::Shop && player.player_number == state.player_count - 1 {
             ui_writer.send(UiMessage::SetSceneMessage(GameMode::Battle));
         }
-        player.is_active = false;
-        let is_highest = player.player_number == state.player_count - 1;
-        let previous = player.player_number;
-        for (_, mut player, _, _, _) in &mut players {
-            // The round is over, start at 0 again
-            if end_game {
-                if player.player_number == 0 {
-                    player.is_active = true;
-                }
-            } else if is_highest && player.player_number == 0
-                || player.player_number == previous + 1
-            {
-                player.is_active = true;
-            }
-        }
+        state.increment_player();
     }
 }

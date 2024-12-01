@@ -1,5 +1,5 @@
 use bevy::{
-    prelude::{Entity, EventWriter, Query, Transform},
+    prelude::{Entity, EventWriter, Query, Res, ResMut, Transform},
     sprite::Sprite,
 };
 use bevy_iced::{
@@ -14,7 +14,7 @@ use enum_iterator::all;
 use crate::{
     bullets::{BulletCount, BulletType},
     tank::Tank,
-    utils::{EndTurnEvent, Player},
+    utils::{EndTurnEvent, GameState, Player},
     UiMessage,
 };
 
@@ -28,6 +28,7 @@ pub enum ShopMessage {
 
 pub fn update_shop_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
+    state: ResMut<GameState>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut end_turn_writer: EventWriter<EndTurnEvent>,
 ) {
@@ -39,7 +40,7 @@ pub fn update_shop_ui<'a>(
         .collect();
     let mut current_player_opt = None;
     for (_, player, _, _, _) in &mut query {
-        if player.is_active {
+        if state.active_player == player.player_number {
             current_player_opt = Some(player);
         }
     }
@@ -63,11 +64,15 @@ pub fn update_shop_ui<'a>(
     }
 }
 
-pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMessage>) {
+pub fn view_shop_ui(
+    state: Res<GameState>,
+    player_query: Query<(&Player, &Tank)>,
+    mut ctx: IcedContext<UiMessage>,
+) {
     let wrap = UiMessage::ShopMessage;
     let mut current_player_opt = None;
     for (player, _) in player_query.iter() {
-        if player.is_active {
+        if state.active_player == player.player_number {
             current_player_opt = Some(player);
         }
     }

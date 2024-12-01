@@ -54,7 +54,7 @@ pub fn handle_keypress(
     }
     let (mut player_opt, mut tank_opt) = (None, None);
     for (player, tank) in query.iter() {
-        if player.is_active {
+        if state.active_player == player.player_number {
             player_opt = Some(player);
             tank_opt = Some(tank);
         }

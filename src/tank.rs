@@ -1,3 +1,5 @@
+use core::f32;
+
 use bevy::{
     math::Vec2,
     prelude::{Bundle, Component},
@@ -33,6 +35,10 @@ impl Angle {
     pub fn get(&self) -> f32 {
         self.value
     }
+
+    //pub fn get_degrees(&self) -> f32 {
+    //    self.value * (180.0 / f32::consts::PI)
+    //}
 
     pub fn set(&mut self, value: f32) {
         if Self::check(value) {
