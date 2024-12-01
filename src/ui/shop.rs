@@ -1,5 +1,5 @@
 use bevy::{
-    prelude::{Entity, Query, Transform},
+    prelude::{Entity, EventWriter, Query, Res, ResMut, Transform},
     sprite::Sprite,
 };
 use bevy_iced::{
@@ -14,7 +14,7 @@ use enum_iterator::all;
 use crate::{
     bullets::{BulletCount, BulletType},
     tank::Tank,
-    utils::{GameMode, Player},
+    utils::{EndTurnEvent, GameState, Player},
     UiMessage,
 };
 
@@ -28,7 +28,9 @@ pub enum ShopMessage {
 
 pub fn update_shop_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
+    state: ResMut<GameState>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+    mut end_turn_writer: EventWriter<EndTurnEvent>,
 ) {
     let msgs: Vec<&ShopMessage> = messages
         .filter_map(|val| match val {
@@ -38,7 +40,7 @@ pub fn update_shop_ui<'a>(
         .collect();
     let mut current_player_opt = None;
     for (_, player, _, _, _) in &mut query {
-        if player.is_active {
+        if state.active_player == player.player_number {
             current_player_opt = Some(player);
         }
     }
@@ -54,17 +56,23 @@ pub fn update_shop_ui<'a>(
                         .unwrap_or(&BulletCount::Count(0));
                     player.inventory.insert(*bullet_type, old.increment());
                 }
-                ShopMessage::EndTurn => println!("end turn"),
+                ShopMessage::EndTurn => {
+                    end_turn_writer.send(EndTurnEvent {});
+                }
             }
         }
     }
 }
 
-pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<UiMessage>) {
+pub fn view_shop_ui(
+    state: Res<GameState>,
+    player_query: Query<(&Player, &Tank)>,
+    mut ctx: IcedContext<UiMessage>,
+) {
     let wrap = UiMessage::ShopMessage;
     let mut current_player_opt = None;
     for (player, _) in player_query.iter() {
-        if player.is_active {
+        if state.active_player == player.player_number {
             current_player_opt = Some(player);
         }
     }
@@ -76,13 +84,8 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
             if let BulletCount::Count(count) = current_count {
                 Some(container(column![
                     text(format!("Cost: {}, You currently have: {}", cost, count)),
-                    button("buy").on_press_maybe(if cost <= player.money {
-                        if *count < max_count {
-                            // TODO
-                            Some(wrap(ShopMessage::BuyItem(*elem)))
-                        } else {
-                            None
-                        }
+                    button("buy").on_press_maybe(if cost <= player.money && *count < max_count {
+                        Some(wrap(ShopMessage::BuyItem(*elem)))
                     } else {
                         None
                     }),
@@ -91,8 +94,7 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
                 None
             }
         };
-        let battle_button =
-            button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Battle));
+        let battle_button = button(text("confirm")).on_press(wrap(ShopMessage::EndTurn));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
         let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> =
             bullets.iter().filter_map(item_container).collect();
@@ -102,12 +104,21 @@ pub fn view_shop_ui(player_query: Query<(&Player, &Tank)>, mut ctx: IcedContext<
         }
         ctx.display(
             container(column![
-                row![battle_button, text("Hello")],
-                row![container(bullet_container)].align_items(Alignment::Center)
+                row![battle_button].padding(5),
+                column![
+                    text(format!("Player: {}", player.player_number)),
+                    text(format!("Money: {}", player.money))
+                ]
+                .padding(5),
+                row![container(bullet_container)]
+                    .align_items(Alignment::Center)
+                    .padding(5)
             ])
             .padding(10)
-            .width(1920)
-            .height(1080)
+            .width(5000)
+            .height(5000)
+            .center_x()
+            .center_y()
             .style(get_custom_container_style()),
         )
     }

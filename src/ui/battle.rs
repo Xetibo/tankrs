@@ -3,8 +3,10 @@ use std::ops::RangeInclusive;
 
 use bevy::{
     asset::{AssetServer, Assets},
+    math::Vec2,
     prelude::{Commands, Entity, EventWriter, Mesh, Query, Res, ResMut, Transform},
     sprite::{ColorMaterial, Sprite},
+    time::Time,
 };
 use bevy_iced::{
     iced::{
@@ -27,7 +29,7 @@ pub enum BattleMessage {
     MoveRight,
     MoveLeft,
     Fire,
-    SetVelocity(u32),
+    SetVelocity(f32),
     SetAngle(f32),
     SelectBullet(BulletType),
     // UseRepair,
@@ -51,7 +53,7 @@ pub fn view_battle_ui(
     let shop_button = button(text("shop")).on_press(UiMessage::SetSceneMessage(GameMode::Shop));
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
-        if player.is_active {
+        if state.active_player == player.player_number {
             current_player_opt = Some(player);
             player_tank_opt = Some(tank);
         }
@@ -78,6 +80,7 @@ pub fn view_battle_ui(
 #[allow(clippy::too_many_arguments)]
 pub fn update_battle_ui<'a>(
     messages: impl Iterator<Item = &'a UiMessage>,
+    time: Res<Time>,
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -101,7 +104,7 @@ pub fn update_battle_ui<'a>(
         return;
     }
     let (_, mut player, mut tank, mut transform, _) =
-        if let Some(props) = get_current_player_props(&mut query) {
+        if let Some(props) = get_current_player_props(state.active_player, &mut query) {
             props
         } else {
             // TODO this is not good
@@ -112,21 +115,20 @@ pub fn update_battle_ui<'a>(
             }
             return;
         };
+    let delta = time.delta_seconds();
     for msg in msgs {
         match msg {
             BattleMessage::Reset => {
                 reset_writer.send(ResetEvent {});
             }
             BattleMessage::MoveRight => {
-                // TODO deduplicate form inputs
-                transform.translation.x += 10.0;
+                transform.translation.x += player.drive(10) * delta;
             }
             BattleMessage::MoveLeft => {
-                // TODO deduplicate form inputs
-                transform.translation.x -= 10.0;
+                transform.translation.x -= player.drive(10) * delta;
             }
             BattleMessage::Fire => {
-                // TODO deduplicate form inputs
+                state.firing = true;
                 let bullet_type = player.selected_bullet.0;
                 let count_type = *player
                     .inventory
@@ -142,10 +144,15 @@ pub fn update_battle_ui<'a>(
                         }
                     }
                 }
+                let angle = &tank.shooting_direction.get();
+                let x_unit_vec = (angle).cos() * -1.0;
                 let info = BulletInfo {
-                    direction: &tank.shooting_direction,
-                    velocity: &tank.shooting_velocity,
+                    velocity: &Vec2 {
+                        x: x_unit_vec * player.fire_velocity,
+                        y: (angle).sin() * player.fire_velocity,
+                    },
                     origin: &transform.translation,
+                    owner: player.player_number,
                 };
                 (player.selected_bullet.1)(
                     &mut commands,
@@ -154,7 +161,6 @@ pub fn update_battle_ui<'a>(
                     &asset_server,
                     &info,
                 );
-                state.firing = true;
             }
             BattleMessage::SetVelocity(velocity) => {
                 player.fire_velocity = *velocity;
@@ -188,6 +194,7 @@ fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
 
 fn fuel(player: &Player) -> impl Into<IcedElement> {
     row![
+        // TODO make this work continuously
         button(text("left"))
             .on_press(wrap(BattleMessage::MoveLeft))
             .padding(5),
@@ -200,36 +207,40 @@ fn fuel(player: &Player) -> impl Into<IcedElement> {
 }
 
 fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
-    // TODO deduplicate
     let angle_range = RangeInclusive::new(0.0, f32::consts::PI);
     let current_angle = tank.shooting_direction.get();
 
-    let velocity_range = RangeInclusive::new(0, 100);
+    let velocity_range = RangeInclusive::new(0.0, 10.0);
     let current_velocity = player.fire_velocity;
     row![
         column![
-            text("Set Angle"),
+            text(format!(
+                "Angle: {:.0}",
+                current_angle * 180.0 / f32::consts::PI
+            )),
             slider(angle_range, current_angle, |val| wrap(
                 BattleMessage::SetAngle(val)
-            )),
+            ))
+            .step(0.01),
         ],
         column![
-            text("Set Velocity"),
+            text(format!("Velocity: {:.0}", current_velocity)),
             slider(velocity_range, current_velocity, |val| wrap(
                 BattleMessage::SetVelocity(val)
-            )),
+            ))
+            .step(0.1),
         ],
         button(text("fire")).on_press(wrap(BattleMessage::Fire)),
     ]
     .spacing(10)
 }
 
-fn info_box(wind: i32, player: &Player) -> impl Into<IcedElement> {
+fn info_box(wind: f32, player: &Player) -> impl Into<IcedElement> {
     // TODO display properly
     column![
-        text(format!("wind: {}", wind)),
+        text(format!("Wind: {:.2}", wind)),
         text(format!("Player: {}", player.player_number)),
-        text(format!("health: {}", player.health)),
-        text(format!("health: {}", player.money)),
+        text(format!("Health: {}", player.health)),
+        text(format!("Money: {}", player.money)),
     ]
 }

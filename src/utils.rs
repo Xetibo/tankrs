@@ -8,10 +8,16 @@ use bevy::{
 };
 
 use crate::{
-    bullets::{BulletCount, BulletInfo, BulletType},
+    bullets::{BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
     inputs::KeyMap,
     tank::Tank,
 };
+
+#[derive(Event)]
+pub struct PlayerKillEvent {
+    pub killer: u32,
+    pub killed: u32,
+}
 
 #[derive(Event)]
 pub struct FireEvent {}
@@ -39,10 +45,35 @@ pub enum GameMode {
 pub struct GameState {
     pub firing: bool,
     pub mode: GameMode,
+    pub active_player: u32,
     pub player_count: u32,
     pub player_count_input: String,
     pub player_count_parse_error: bool,
-    pub wind: i32,
+    pub wind: f32,
+}
+
+impl GameState {
+    pub fn increment_player(&mut self) {
+        if self.active_player == self.player_count - 1 {
+            self.active_player = 0;
+        } else {
+            self.active_player += 1;
+        }
+    }
+}
+
+impl Default for GameState {
+    fn default() -> Self {
+        GameState {
+            firing: false,
+            mode: GameMode::StartMenu,
+            active_player: 0,
+            player_count_input: "2".into(),
+            player_count: 2,
+            player_count_parse_error: false,
+            wind: random_wind(),
+        }
+    }
 }
 
 pub type BulletFn = fn(
@@ -67,17 +98,47 @@ pub struct Player {
     pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
     pub selected_bullet: BulletTypeAndFn,
-    pub health: u32,
+    pub health: i32,
     pub fuel: u32,
     pub money: u32,
     pub key_map: KeyMap,
-    pub is_active: bool,
-    pub fire_velocity: u32,
+    pub fire_velocity: f32,
 }
 
 impl Player {
     pub fn selected_bullet(&self) -> BulletFn {
         self.selected_bullet.1
+    }
+
+    /// Returns the x axis change according to fuel used
+    pub fn drive(&mut self, fuel_change: u32) -> f32 {
+        self.fuel = if self.fuel > fuel_change {
+            self.fuel - fuel_change
+        } else {
+            0
+        };
+        self.fuel as f32
+    }
+
+    pub fn from_previous_or_initial(
+        index: u32,
+        props_opt: Option<&(u32, HashMap<BulletType, BulletCount>)>,
+    ) -> Player {
+        let (inventory, money) = if let Some(props) = props_opt {
+            (props.1.clone(), props.0)
+        } else {
+            (BulletType::init_bullets(), 0)
+        };
+        Player {
+            player_number: index,
+            inventory,
+            health: 100,
+            fuel: 1000,
+            money,
+            key_map: KeyMap::default_keymap(),
+            selected_bullet: (BulletType::RegularBullet, NORMAL_BULLET),
+            fire_velocity: 1.0,
+        }
     }
 }
 
@@ -99,12 +160,13 @@ pub fn power(_num: f32, pow: i32) -> f32 {
 }
 
 pub fn get_current_player_props<'a>(
+    active_player_index: u32,
     query: &'a mut Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
 ) -> PlayerProps<'a> {
     let (mut entity_opt, mut player_opt, mut tank_opt, mut transform_opt, mut sprite_opt) =
         (None, None, None, None, None);
     for (entity, player, tank, transform, sprite) in query {
-        if player.is_active {
+        if active_player_index == player.player_number {
             entity_opt = Some(entity);
             player_opt = Some(player);
             tank_opt = Some(tank);
@@ -119,4 +181,8 @@ pub fn get_current_player_props<'a>(
     } else {
         None
     }
+}
+
+pub fn random_wind() -> f32 {
+    rand::random::<f32>().clamp(-0.3, 0.3)
 }

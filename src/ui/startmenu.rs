@@ -1,6 +1,9 @@
 use bevy::prelude::{EventWriter, Res, ResMut};
 use bevy_iced::{
-    iced::widget::{button, column, container, text, text_input},
+    iced::{
+        alignment::{Horizontal, Vertical},
+        widget::{button, column, container, row, text, text_input},
+    },
     IcedContext,
 };
 
@@ -54,7 +57,7 @@ pub fn update_startmenu_ui<'a>(
 
 pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>) {
     let wrap = UiMessage::StartMenuMessage;
-    let title = text("Tankrs").height(300);
+    let title = text("Tankrs");
     let start_button = button("Start").on_press_maybe(if state.player_count_parse_error {
         None
     } else {
@@ -62,11 +65,19 @@ pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>)
     });
     let input = text_input("Player Count", &state.player_count_input)
         .on_input(|count| wrap(StartMenuMessage::ChoosePlayerCount(count)));
+    let content_container =
+        container(column![title, row![input, start_button].spacing(5)].spacing(10))
+            .width(300)
+            .height(600)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center);
     ctx.display(
-        container(column![title, input, start_button])
+        container(content_container)
             .padding(10)
-            .width(1920)
-            .height(1080)
+            .width(5000)
+            .height(5000)
+            .align_x(Horizontal::Center)
+            .align_y(Vertical::Center)
             .style(get_custom_container_style()),
     )
 }

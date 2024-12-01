@@ -1,16 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
 use bevy::{
-    asset::{AssetServer, Assets},
     input::ButtonInput,
-    prelude::{Commands, Component, Entity, KeyCode, Mesh, Query, Res, ResMut, Transform},
-    sprite::{ColorMaterial, Sprite},
+    prelude::{Component, EventWriter, KeyCode, Query, Res},
 };
 
 use crate::{
-    bullets::{BulletInfo, BulletType},
+    bullets::BulletType,
     tank::Tank,
-    utils::{get_current_player_props, GameMode, GameState, Player},
+    ui::battle::BattleMessage,
+    utils::{GameMode, GameState, Player},
+    UiMessage,
 };
 
 #[derive(Component, Clone)]
@@ -21,6 +21,8 @@ pub struct KeyMap {
     aim_right: Rc<RefCell<KeyCode>>,
     fire: Rc<RefCell<KeyCode>>,
     switch_bullet: Rc<RefCell<KeyCode>>,
+    velocity_up: Rc<RefCell<KeyCode>>,
+    velocity_down: Rc<RefCell<KeyCode>>,
 }
 
 unsafe impl Send for KeyMap {}
@@ -35,78 +37,61 @@ impl KeyMap {
             aim_right: Rc::new(RefCell::new(KeyCode::KeyD)),
             fire: Rc::new(RefCell::new(KeyCode::Space)),
             switch_bullet: Rc::new(RefCell::new(KeyCode::ShiftLeft)),
+            velocity_up: Rc::new(RefCell::new(KeyCode::KeyQ)),
+            velocity_down: Rc::new(RefCell::new(KeyCode::KeyE)),
         }
     }
 }
 
 pub fn handle_keypress(
-    mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+    query: Query<(&Player, &Tank)>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     state: Res<GameState>,
-    asset_server: Res<AssetServer>,
+    mut writer: EventWriter<UiMessage>,
 ) {
     if state.firing || state.mode != GameMode::Battle {
         return;
     }
-    let (_, mut player, mut tank, mut transform, mut sprite) =
-        if let Some(props) = get_current_player_props(&mut query) {
-            props
-        } else {
-            return;
-        };
+    let (mut player_opt, mut tank_opt) = (None, None);
+    for (player, tank) in query.iter() {
+        if state.active_player == player.player_number {
+            player_opt = Some(player);
+            tank_opt = Some(tank);
+        }
+    }
+    let (player, tank) = if let (Some(player), Some(tank)) = (player_opt, tank_opt) {
+        (player, tank)
+    } else {
+        return;
+    };
+    let wrap = UiMessage::BattleMessage;
     if keys.pressed(*player.key_map.tank_right.borrow()) {
-        transform.translation.x += 10.0;
-        sprite.flip_x = false;
+        writer.send(wrap(BattleMessage::MoveRight));
     }
     if keys.pressed(*player.key_map.tank_left.borrow()) {
-        transform.translation.x -= 10.0;
-        sprite.flip_x = true;
+        writer.send(wrap(BattleMessage::MoveLeft));
     }
 
-    // x 1.0 y 0.0
-    // x 0.0 y 1.0
-    // x -1.0 y 0.0
-    let current = tank.shooting_direction.get();
+    let current_angle = tank.shooting_direction.get();
+    let current_velocity = player.fire_velocity;
     if keys.pressed(*player.key_map.aim_right.borrow()) {
-        tank.shooting_direction.set(current - 0.01);
+        writer.send(wrap(BattleMessage::SetAngle(current_angle - 0.01)));
     }
     if keys.pressed(*player.key_map.aim_left.borrow()) {
-        tank.shooting_direction.set(current + 0.01);
+        writer.send(wrap(BattleMessage::SetAngle(current_angle + 0.01)));
     }
-    if keys.pressed(*player.key_map.fire.borrow()) {
-        let info = BulletInfo {
-            direction: &tank.shooting_direction,
-            velocity: &tank.shooting_velocity,
-            origin: &transform.translation,
-        };
-        (player.selected_bullet.1)(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            &asset_server,
-            &info,
-        );
+    if keys.just_released(*player.key_map.fire.borrow()) {
+        writer.send(wrap(BattleMessage::Fire));
+    }
+    if keys.just_released(*player.key_map.velocity_up.borrow()) {
+        writer.send(wrap(BattleMessage::SetVelocity(current_velocity + 0.1)));
+    }
+    if keys.just_released(*player.key_map.velocity_down.borrow()) {
+        writer.send(wrap(BattleMessage::SetVelocity(current_velocity - 0.1)));
     }
     if keys.pressed(*player.key_map.switch_bullet.borrow()) {
         let previous_bullet = player.selected_bullet.0.get_int_value();
         let new_bullet = BulletType::get_from_int(previous_bullet + 1);
-        let bullet_count_opt = player.inventory.get_mut(&new_bullet);
-
-        if let Some(count_type) = bullet_count_opt {
-            match count_type {
-                crate::bullets::BulletCount::Unlimited => (),
-                crate::bullets::BulletCount::Count(count) => {
-                    // TODO limit count on shooting
-                    if *count == 0 {
-                        player.inventory.remove(&new_bullet);
-                    }
-                    let new_bullet_func = new_bullet.get_bullet_from_type();
-                    player.selected_bullet = (new_bullet, new_bullet_func);
-                }
-            }
-        }
+        writer.send(wrap(BattleMessage::SelectBullet(new_bullet)));
     }
 }

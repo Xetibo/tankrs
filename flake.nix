@@ -22,44 +22,54 @@
           pkgs,
           ...
         }:
+        let
+          buildInputsArr = with pkgs; [
+            udev
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXrandr
+            xorg.libXi
+            xorg.libxcb
+            libGL
+            vulkan-loader
+            vulkan-headers
+            alsa-lib
+          ];
+          nativeBuildInputsArr = with pkgs; [
+            rustc
+            rust-analyzer
+            rustfmt
+            clippy
+            wayland
+            rust-analyzer
+            rustfmt
+            lldb
+            cargo-geiger
+            renderdoc
+            alsa-lib
+            pkg-config
+            mold
+            clang
+            makeWrapper
+            lld
+            libxkbcommon
+            udev
+            alsa-lib
+            vulkan-loader
+            glib
+          ];
+
+        in
         {
           devShells.default = pkgs.mkShell rec {
-            buildInputs = with pkgs; [
-              udev
-              xorg.libX11
-              xorg.libXcursor
-              xorg.libXrandr
-              xorg.libXi
-              xorg.libxcb
-              libGL
-              vulkan-loader
-              vulkan-headers
-            ];
-            nativeBuildInputs = with pkgs; [
-              rustc
-              rust-analyzer
-              rustfmt
-              clippy
-              wayland
-              rust-analyzer
-              rustfmt
-              lldb
-              cargo-geiger
-              renderdoc
-              alsa-lib
-              pkg-config
-              mold
-              clang
-              makeWrapper
-              lld
-              libxkbcommon
-              udev
-              alsa-lib
-              vulkan-loader
-              glib
-            ];
+            buildInputs = buildInputsArr;
+            nativeBuildInputs = nativeBuildInputsArr;
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeBuildInputs;
             LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+          };
+
+          packages = {
+            default = pkgs.callPackage ./nix/tankrs.nix { inherit inputs buildInputsArr nativeBuildInputsArr; };
           };
         };
     };
