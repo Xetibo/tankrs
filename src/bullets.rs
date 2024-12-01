@@ -1,19 +1,18 @@
-use std::{fmt::Display, hash::Hash, sync::Arc};
+use std::{fmt::Display, hash::Hash};
 
 use bevy::{
     asset::{AssetServer, Assets},
     color::Color,
     math::{Vec2, Vec3},
     prelude::{
-        default, Bundle, Circle, Commands, Component, DespawnRecursiveExt, Entity, Mesh, Res,
-        ResMut, Transform,
+        default, Bundle, Circle, Commands, Component, EventWriter, Mesh, Res, ResMut, Transform,
     },
     sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle, SpriteBundle},
     utils::HashMap,
 };
 use enum_iterator::Sequence;
 
-use crate::utils::{BulletFn, GameState};
+use crate::utils::{BulletFn, CollisionFn, EndTurnEvent, GameState};
 
 #[derive(Component)]
 pub struct BulletCollider {}
@@ -61,11 +60,11 @@ impl BulletType {
         }
     }
 
-    pub fn get_bullet_from_type(&self) -> BulletFn {
+    pub fn get_bullet_from_type(&self) -> Bullet {
         match self {
             BulletType::RegularBullet => NORMAL_BULLET,
-            BulletType::FireBullet => FIRE_BULLET,
-            BulletType::Nuke => NUKE,
+            BulletType::FireBullet => todo!(), //FIRE_BULLET,
+            BulletType::Nuke => todo!(),       // NUKE,
         }
     }
 
@@ -117,25 +116,6 @@ impl BulletCount {
     }
 }
 
-pub trait Bullet: Send + Sync + 'static {
-    fn entity(&self) -> Option<Entity>;
-    fn bullet_info(&self, info: &BulletInfo) -> BulletEntity;
-    fn bullet_type(&self) -> BulletType;
-    fn fire(
-        &mut self,
-        commands: &mut Commands,
-        state: &mut ResMut<GameState>,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<ColorMaterial>>,
-        _: &Res<AssetServer>,
-        info: &BulletInfo,
-    );
-    fn ground_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>);
-    fn player_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>);
-    // TODO needed?
-    //pub fn destruct();
-}
-
 #[derive(Component)]
 pub struct BulletEntity {
     pub velocity_shot: Vec2,
@@ -173,37 +153,33 @@ impl<'a> BulletInfo<'a> {
     }
 }
 
-#[derive(Component)]
-pub struct NormalBullet {
-    entity_id: Option<Entity>,
-    bullet_type: BulletType,
+#[derive(Component, Clone)]
+pub struct Bullet {
+    pub firefn: BulletFn,
+    pub playerhitfn: CollisionFn,
+    pub groundhitfn: CollisionFn,
+    pub bullet_type: BulletType,
 }
 
-impl NormalBullet {
-    pub fn new() -> Arc<NormalBullet> {
-        Arc::new(NormalBullet {
-            entity_id: None,
-            bullet_type: BulletType::RegularBullet,
-        })
-    }
-}
+pub const REGULAR_HIT: CollisionFn =
+    |_: &mut Commands, state: &mut ResMut<GameState>, writer: &mut EventWriter<EndTurnEvent>| {
+        state.firing = false;
+        writer.send(EndTurnEvent {});
+    };
 
-impl Bullet for NormalBullet {
-    fn fire(
-        &mut self,
-        commands: &mut Commands,
-        state: &mut ResMut<GameState>,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<ColorMaterial>>,
-        _: &Res<AssetServer>,
-        info: &BulletInfo,
-    ) {
+pub const NORMAL_BULLETFIRE: BulletFn =
+    |commands: &mut Commands,
+     state: &mut ResMut<GameState>,
+     meshes: &mut ResMut<Assets<Mesh>>,
+     materials: &mut ResMut<Assets<ColorMaterial>>,
+     _: &Res<AssetServer>,
+     info: &BulletInfo| {
         let offset_origin = Vec3 {
             x: info.origin.x,
             y: info.origin.y + 20.0,
             z: 0.0,
         };
-        let entity = commands.spawn((
+        commands.spawn((
             BulletMeshBundle {
                 bullet: BulletEntity {
                     velocity_shot: *info.velocity,
@@ -230,51 +206,15 @@ impl Bullet for NormalBullet {
             },
             BulletType::RegularBullet,
         ));
-        self.entity_id = Some(entity.id());
         state.firing = true;
-    }
+    };
 
-    fn ground_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>) {
-        state.firing = false;
-        let entity_opt = self.entity();
-        if let Some(entity) = entity_opt {
-            commands.entity(entity).despawn_recursive();
-        }
-    }
-
-    fn player_hit(&self, commands: &mut Commands, state: &mut ResMut<GameState>) {
-        state.firing = false;
-        let entity_opt = self.entity();
-        if let Some(entity) = entity_opt {
-            commands.entity(entity).despawn_recursive();
-        }
-    }
-
-    fn bullet_info(&self, info: &BulletInfo) -> BulletEntity {
-        BulletEntity {
-            velocity_shot: *info.velocity,
-            velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-            // TODO implement
-            damage: 10,
-            radius: 10,
-            owner: info.owner,
-        }
-    }
-
-    fn entity(&self) -> Option<Entity> {
-        self.entity_id
-    }
-
-    fn bullet_type(&self) -> BulletType {
-        self.bullet_type
-    }
-}
-pub const NORMAL_BULLET: BulletFn = |commands: &mut Commands,
-                                     state: &mut ResMut<GameState>,
-                                     meshes: &mut ResMut<Assets<Mesh>>,
-                                     materials: &mut ResMut<Assets<ColorMaterial>>,
-                                     _: &Res<AssetServer>,
-                                     info: &BulletInfo| {};
+pub const NORMAL_BULLET: Bullet = Bullet {
+    firefn: NORMAL_BULLETFIRE,
+    playerhitfn: REGULAR_HIT,
+    groundhitfn: REGULAR_HIT,
+    bullet_type: BulletType::RegularBullet,
+};
 
 pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
                                    state: &mut ResMut<GameState>,

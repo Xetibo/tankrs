@@ -90,7 +90,7 @@ pub fn handle_keypress(
         writer.send(wrap(BattleMessage::SetVelocity(current_velocity - 0.1)));
     }
     if keys.pressed(*player.key_map.switch_bullet.borrow()) {
-        let previous_bullet = player.selected_bullet.0.get_int_value();
+        let previous_bullet = player.selected_bullet.bullet_type.get_int_value();
         let new_bullet = BulletType::get_from_int(previous_bullet + 1);
         writer.send(wrap(BattleMessage::SelectBullet(new_bullet)));
     }

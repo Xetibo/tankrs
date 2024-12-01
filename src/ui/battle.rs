@@ -19,7 +19,7 @@ use bevy_iced::{
 use crate::{
     bullets::{BulletCount, BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, GameState, Player, ResetEvent},
+    utils::{get_current_player_props, polynomial, GameState, Player, ResetEvent},
     UiMessage,
 };
 
@@ -57,7 +57,7 @@ pub fn view_battle_ui(
         }
     }
     if let (Some(player), Some(tank)) = (current_player_opt, player_tank_opt) {
-        let current_bullet = player.selected_bullet.bullet_type();
+        let current_bullet = player.selected_bullet.bullet_type;
         let current_bullet_count_opt = player.inventory.get(&current_bullet);
         let current_bullet_count_str =
             if let Some(BulletCount::Count(count)) = current_bullet_count_opt {
@@ -129,12 +129,14 @@ pub fn update_battle_ui<'a>(
             }
             BattleMessage::MoveRight => {
                 transform.translation.x += player.drive(10) * delta;
+                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 625.0;
             }
             BattleMessage::MoveLeft => {
                 transform.translation.x -= player.drive(10) * delta;
+                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 625.0;
             }
             BattleMessage::Fire => {
-                let bullet_type = player.selected_bullet.bullet_type();
+                let bullet_type = player.selected_bullet.bullet_type;
                 let count_type = *player
                     .inventory
                     .get(&bullet_type)
@@ -160,7 +162,7 @@ pub fn update_battle_ui<'a>(
                     owner: player.player_number,
                 };
 
-                player.selected_bullet.fire(
+                (player.selected_bullet.firefn)(
                     &mut commands,
                     &mut state,
                     &mut meshes,
@@ -176,9 +178,8 @@ pub fn update_battle_ui<'a>(
                 tank.shooting_direction.set(*angle);
             }
             BattleMessage::SelectBullet(bullet) => {
-                // TODO reimplement
-                //let bullet_fn = bullet.get_bullet_from_type();
-                //player.selected_bullet = (*bullet, bullet_fn);
+                let bullet_fn = bullet.get_bullet_from_type();
+                player.selected_bullet = bullet_fn;
             }
         }
     }
@@ -192,7 +193,7 @@ fn wrap(msg: BattleMessage) -> UiMessage {
 
 fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
     let options: Vec<BulletType> = player.inventory.keys().copied().collect();
-    let selected = Some(player.selected_bullet.0);
+    let selected = Some(player.selected_bullet.bullet_type);
     column![bevy_iced::iced::widget::pick_list(
         options,
         selected,

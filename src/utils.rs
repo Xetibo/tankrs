@@ -1,16 +1,15 @@
-use std::{rc::Rc, sync::Arc};
-
 use bevy::{
     asset::{AssetServer, Assets},
     prelude::{
-        Commands, Component, Entity, Event, Mesh, Mut, Query, Res, ResMut, Resource, Transform,
+        Commands, Component, Entity, Event, EventWriter, Mesh, Mut, Query, Res, ResMut, Resource,
+        Transform,
     },
     sprite::{ColorMaterial, Sprite},
     utils::HashMap,
 };
 
 use crate::{
-    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NormalBullet, NORMAL_BULLET},
+    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
     inputs::KeyMap,
     tank::Tank,
 };
@@ -86,6 +85,9 @@ pub type BulletFn = fn(
     &Res<AssetServer>,
     &BulletInfo,
 );
+
+pub type CollisionFn = fn(&mut Commands, &mut ResMut<GameState>, &mut EventWriter<EndTurnEvent>);
+
 pub type BulletTypeAndFn = (BulletType, BulletFn);
 
 pub type PlayerProps<'a> = Option<(
@@ -100,7 +102,7 @@ pub type PlayerProps<'a> = Option<(
 pub struct Player {
     pub player_number: u32,
     pub inventory: HashMap<BulletType, BulletCount>,
-    pub selected_bullet: Arc<dyn Bullet>,
+    pub selected_bullet: Bullet,
     pub health: i32,
     pub fuel: u32,
     pub money: u32,
@@ -109,10 +111,6 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn selected_bullet(&self) -> Arc<dyn Bullet> {
-        self.selected_bullet.clone()
-    }
-
     /// Returns the x axis change according to fuel used
     pub fn drive(&mut self, fuel_change: u32) -> f32 {
         self.fuel = if self.fuel > fuel_change {
@@ -139,7 +137,7 @@ impl Player {
             fuel: 1000,
             money,
             key_map: KeyMap::default_keymap(),
-            selected_bullet: NormalBullet::new(),
+            selected_bullet: NORMAL_BULLET,
             fire_velocity: 1.0,
         }
     }

@@ -51,7 +51,7 @@ fn main() {
         .add_systems(Update, view_ui)
         .add_systems(Update, collision_handler)
         .add_systems(Update, bullet_collision)
-        .add_systems(Update, gravity)
+        //.add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .add_systems(Update, swap_player)
         .add_systems(Update, handle_keypress)
@@ -174,6 +174,7 @@ fn reset_players(
             commands.entity(entity).despawn_recursive();
         }
         for i in 0..state.player_count {
+            let x_cord = -200.0 + i as f32 * 150.0;
             commands.spawn(TankBundle {
                 sprite: SpriteBundle {
                     texture: asset_server.load("greentank_rechts.png"),
@@ -184,8 +185,8 @@ fn reset_players(
                             z: 1.0,
                         },
                         translation: Vec3 {
-                            x: -200.0 + i as f32 * 150.0,
-                            y: -150.0,
+                            x: x_cord,
+                            y: polynomial(x_cord as i32, 0.5) - 625.0,
                             z: 1.0,
                         },
                         ..default()
@@ -239,14 +240,14 @@ fn move_bullets(
     }
 }
 
-fn gravity(mut query: Query<(&Tank, &mut Transform)>) {
-    for (_, mut transform) in &mut query {
-        transform.translation.y = (transform.translation.y - 9.81).clamp(
-            polynomial(transform.translation.x as i32, 0.5) - 550.0,
-            1000.0,
-        );
-    }
-}
+//fn gravity(mut query: Query<(&Tank, &mut Transform)>) {
+//    for (_, mut transform) in &mut query {
+//        transform.translation.y = (transform.translation.y - 9.81).clamp(
+//            polynomial(transform.translation.x as i32, 0.5) - 550.0,
+//            1000.0,
+//        );
+//    }
+//}
 
 fn collision_handler(
     mut tanks: Query<&mut Tank, Without<Wall>>,
@@ -267,22 +268,20 @@ fn collision_handler(
 fn bullet_collision(
     mut commands: Commands,
     mut state: ResMut<GameState>,
-    bullets: Query<(Entity, &mut BulletEntity, &Transform)>,
+    bullets: Query<(Entity, &mut BulletEntity, &Transform, &BulletType)>,
     walls: Query<(&Wall, &Transform)>,
     mut query: Query<(Entity, &mut Player, &Tank, &Transform)>,
     mut writer: EventWriter<EndTurnEvent>,
     mut battle_writer: EventWriter<PlayerKillEvent>,
 ) {
-    if bullets.iter().len() == 0 && state.firing {
-        state.firing = false;
-        writer.send(EndTurnEvent {});
-    }
-    for (bullet_entity, bullet, bullet_transform) in &bullets {
+    for (bullet_entity, bullet, bullet_transform, bullet_type) in &bullets {
+        let bullet_info = bullet_type.get_bullet_from_type();
         for (_, _) in &walls {
             if bullet_transform.translation.y
                 < polynomial(bullet_transform.translation.x as i32, 0.5) - 650.0
             {
                 commands.entity(bullet_entity).despawn_recursive();
+                (bullet_info.groundhitfn)(&mut commands, &mut state, &mut writer);
             }
         }
         for (tank_entity, mut player, tank, tank_transform) in &mut query {
@@ -302,6 +301,7 @@ fn bullet_collision(
                     });
                     commands.entity(tank_entity).despawn_recursive();
                 }
+                (bullet_info.playerhitfn)(&mut commands, &mut state, &mut writer);
                 commands.entity(bullet_entity).despawn_recursive();
             }
         }
