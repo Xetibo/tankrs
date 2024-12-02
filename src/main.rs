@@ -146,7 +146,7 @@ fn setup(
             transform: Transform {
                 translation: Vec3 {
                     x: 0.0,
-                    y: -650.0,
+                    y: -700.0,
                     z: 0.0,
                 },
                 ..default()
@@ -186,7 +186,7 @@ fn reset_players(
                         },
                         translation: Vec3 {
                             x: x_cord,
-                            y: polynomial(x_cord as i32, 0.5) - 625.0,
+                            y: polynomial(x_cord as i32, 0.5) - 675.0,
                             z: 1.0,
                         },
                         ..default()
@@ -278,7 +278,7 @@ fn bullet_collision(
         let bullet_info = bullet_type.get_bullet_from_type();
         for (_, _) in &walls {
             if bullet_transform.translation.y
-                < polynomial(bullet_transform.translation.x as i32, 0.5) - 650.0
+                < polynomial(bullet_transform.translation.x as i32, 0.5) - 700.0
             {
                 commands.entity(bullet_entity).despawn_recursive();
                 (bullet_info.groundhitfn)(&mut commands, &mut state, &mut writer);

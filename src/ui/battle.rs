@@ -129,11 +129,11 @@ pub fn update_battle_ui<'a>(
             }
             BattleMessage::MoveRight => {
                 transform.translation.x += player.drive(10) * delta;
-                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 625.0;
+                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 675.0;
             }
             BattleMessage::MoveLeft => {
                 transform.translation.x -= player.drive(10) * delta;
-                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 625.0;
+                transform.translation.y = polynomial(transform.translation.x as i32, 0.5) - 675.0;
             }
             BattleMessage::Fire => {
                 let bullet_type = player.selected_bullet.bullet_type;

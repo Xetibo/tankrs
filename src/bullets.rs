@@ -63,8 +63,8 @@ impl BulletType {
     pub fn get_bullet_from_type(&self) -> Bullet {
         match self {
             BulletType::RegularBullet => NORMAL_BULLET,
-            BulletType::FireBullet => todo!(), //FIRE_BULLET,
-            BulletType::Nuke => todo!(),       // NUKE,
+            BulletType::FireBullet => FIRE_BULLET,
+            BulletType::Nuke => NUKE,
         }
     }
 
@@ -167,68 +167,74 @@ pub const REGULAR_HIT: CollisionFn =
         writer.send(EndTurnEvent {});
     };
 
-pub const NORMAL_BULLETFIRE: BulletFn =
-    |commands: &mut Commands,
-     state: &mut ResMut<GameState>,
-     meshes: &mut ResMut<Assets<Mesh>>,
-     materials: &mut ResMut<Assets<ColorMaterial>>,
-     _: &Res<AssetServer>,
-     info: &BulletInfo| {
-        let offset_origin = Vec3 {
-            x: info.origin.x,
-            y: info.origin.y + 20.0,
-            z: 0.0,
-        };
-        commands.spawn((
-            BulletMeshBundle {
-                bullet: BulletEntity {
-                    velocity_shot: *info.velocity,
-                    velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                    // TODO implement
-                    damage: 10,
-                    radius: 10,
-                    owner: info.owner,
-                },
-                mesh_bundle: MaterialMesh2dBundle {
-                    mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
-                    material: materials.add(Color::BLACK),
-                    transform: Transform {
-                        translation: offset_origin,
-                        scale: Vec3 {
-                            x: 10.0,
-                            y: 10.0,
-                            z: 1.0,
-                        },
-                        ..default()
-                    },
-                    ..default()
-                },
-            },
-            BulletType::RegularBullet,
-        ));
-        state.firing = true;
-    };
-
 pub const NORMAL_BULLET: Bullet = Bullet {
-    firefn: NORMAL_BULLETFIRE,
+    firefn: NORMAL_BULLET_FN,
     playerhitfn: REGULAR_HIT,
     groundhitfn: REGULAR_HIT,
     bullet_type: BulletType::RegularBullet,
 };
 
-pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
-                                   state: &mut ResMut<GameState>,
-                                   meshes: &mut ResMut<Assets<Mesh>>,
-                                   materials: &mut ResMut<Assets<ColorMaterial>>,
-                                   // TODO investigate adding an eventwriter for desapwn event ->  this could instead
-                                   // be used to handle the state for triggering a new players turn
-                                   // ->  each player only fires once, but this bullet can spawn
-                                   // more bullets -> cluster.
-                                   // This despawn method can handle these effects by allowing per
-                                   // bullet overrides. The cluster can delegate the spawning of
-                                   // the event for later.
-                                   _: &Res<AssetServer>,
-                                   info: &BulletInfo| {
+pub const NORMAL_BULLET_FN: BulletFn = |commands: &mut Commands,
+                                        state: &mut ResMut<GameState>,
+                                        meshes: &mut ResMut<Assets<Mesh>>,
+                                        materials: &mut ResMut<Assets<ColorMaterial>>,
+                                        _: &Res<AssetServer>,
+                                        info: &BulletInfo| {
+    let offset_origin = Vec3 {
+        x: info.origin.x,
+        y: info.origin.y + 20.0,
+        z: 0.0,
+    };
+    commands.spawn((
+        BulletMeshBundle {
+            bullet: BulletEntity {
+                velocity_shot: *info.velocity,
+                velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
+                // TODO implement
+                damage: 10,
+                radius: 10,
+                owner: info.owner,
+            },
+            mesh_bundle: MaterialMesh2dBundle {
+                mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
+                material: materials.add(Color::BLACK),
+                transform: Transform {
+                    translation: offset_origin,
+                    scale: Vec3 {
+                        x: 10.0,
+                        y: 10.0,
+                        z: 1.0,
+                    },
+                    ..default()
+                },
+                ..default()
+            },
+        },
+        BulletType::RegularBullet,
+    ));
+    state.firing = true;
+};
+
+pub const FIRE_BULLET: Bullet = Bullet {
+    firefn: FIRE_BULLET_FN,
+    playerhitfn: REGULAR_HIT,
+    groundhitfn: REGULAR_HIT,
+    bullet_type: BulletType::Nuke,
+};
+
+pub const FIRE_BULLET_FN: BulletFn = |commands: &mut Commands,
+                                      state: &mut ResMut<GameState>,
+                                      meshes: &mut ResMut<Assets<Mesh>>,
+                                      materials: &mut ResMut<Assets<ColorMaterial>>,
+                                      // TODO investigate adding an eventwriter for desapwn event ->  this could instead
+                                      // be used to handle the state for triggering a new players turn
+                                      // ->  each player only fires once, but this bullet can spawn
+                                      // more bullets -> cluster.
+                                      // This despawn method can handle these effects by allowing per
+                                      // bullet overrides. The cluster can delegate the spawning of
+                                      // the event for later.
+                                      _: &Res<AssetServer>,
+                                      info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
         y: info.origin.y + 20.0,
@@ -264,12 +270,19 @@ pub const FIRE_BULLET: BulletFn = |commands: &mut Commands,
     state.firing = true;
 };
 
-pub const NUKE: BulletFn = |commands: &mut Commands,
-                            state: &mut ResMut<GameState>,
-                            _: &mut ResMut<Assets<Mesh>>,
-                            _: &mut ResMut<Assets<ColorMaterial>>,
-                            asset_server: &Res<AssetServer>,
-                            info: &BulletInfo| {
+pub const NUKE: Bullet = Bullet {
+    firefn: NUKE_FN,
+    playerhitfn: REGULAR_HIT,
+    groundhitfn: REGULAR_HIT,
+    bullet_type: BulletType::Nuke,
+};
+
+pub const NUKE_FN: BulletFn = |commands: &mut Commands,
+                               state: &mut ResMut<GameState>,
+                               _: &mut ResMut<Assets<Mesh>>,
+                               _: &mut ResMut<Assets<ColorMaterial>>,
+                               asset_server: &Res<AssetServer>,
+                               info: &BulletInfo| {
     let offset_origin = Vec3 {
         x: info.origin.x,
         y: info.origin.y + 20.0,
