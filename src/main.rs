@@ -1,11 +1,10 @@
-use core::f32;
-
 use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
     utils::HashMap,
 };
+use core::f32;
 
 use bevy_iced::{IcedContext, IcedPlugin};
 use bullets::{BulletCount, BulletEntity, BulletType};
@@ -17,8 +16,8 @@ use ui::{
     startmenu::{update_startmenu_ui, view_startmenu_ui, StartMenuMessage},
 };
 use utils::{
-    get_current_player_props, polynomial, random_wind, EndTurnEvent, FireEvent, GameMode,
-    GameState, Player, PlayerKillEvent, ResetEvent,
+    get_current_player_props, next_random, polynomial, EndTurnEvent, FireEvent, GameMode,
+    GameState, Player, PlayerKillEvent, RedrawTerrainEvent, ResetEvent,
 };
 
 pub mod bullets;
@@ -43,6 +42,7 @@ fn main() {
         .add_event::<FireEvent>()
         .add_event::<EndTurnEvent>()
         .add_event::<ResetEvent>()
+        .add_event::<RedrawTerrainEvent>()
         .add_event::<PlayerKillEvent>()
         .insert_resource::<GameState>(GameState::default())
         .add_systems(Startup, setup)
@@ -56,6 +56,7 @@ fn main() {
         .add_systems(Update, swap_player)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, kill_handler)
+        .add_systems(Update, redraw_terrain)
         .run();
 }
 
@@ -109,53 +110,62 @@ pub fn view_ui(
     }
 }
 
-fn setup(
+fn setup(mut writer: EventWriter<ResetEvent>) {
+    writer.send(ResetEvent {});
+}
+
+fn redraw_terrain(
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    state: Res<GameState>,
     mut commands: Commands,
-    mut writer: EventWriter<ResetEvent>,
+    walls: Query<(Entity, &Wall)>,
+    mut reader: EventReader<RedrawTerrainEvent>,
 ) {
-    let rand: f32 = 0.5;
-    let mut vertices = Vec::new();
-    let mut i = -1920;
-    // TODO make this use a proper curve
-    for _ in -1920..1920 {
-        vertices.push([i as f32, 0.0, 0.0]);
-        let two = [i as f32, polynomial(i, rand), 0.0];
-        let three = [(i + 1) as f32, 0.0, 0.0];
-        vertices.push(two);
-        vertices.push(three);
-        vertices.push(three);
-        vertices.push(two);
-        vertices.push([(i + 1) as f32, polynomial(i + 1, rand), 0.0]);
-        i += 1;
-    }
-    let poly = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    for _ in reader.read() {
+        for (entity, _) in walls.iter() {
+            commands.entity(entity).despawn_recursive();
+        }
+        let mut vertices = Vec::new();
+        let mut i = -1920;
+        // TODO make this use a proper curve
+        for _ in -1920..1920 {
+            vertices.push([i as f32, 0.0, 0.0]);
+            let two = [i as f32, polynomial(i, &state), 0.0];
+            let three = [(i + 1) as f32, 0.0, 0.0];
+            vertices.push(two);
+            vertices.push(three);
+            vertices.push(three);
+            vertices.push(two);
+            vertices.push([(i + 1) as f32, polynomial(i + 1, &state), 0.0]);
+            i += 1;
+        }
+        let poly = Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 
-    //poly.insert_indices(Indices::U32(indices));
-    commands.spawn(Camera2dBundle::default());
+        //poly.insert_indices(Indices::U32(indices));
+        commands.spawn(Camera2dBundle::default());
 
-    commands.spawn((
-        MaterialMesh2dBundle {
-            mesh: Mesh2dHandle(meshes.add(poly)),
-            material: materials.add(Color::BLACK),
-            transform: Transform {
-                translation: Vec3 {
-                    x: 0.0,
-                    y: -700.0,
-                    z: 0.0,
+        commands.spawn((
+            MaterialMesh2dBundle {
+                mesh: Mesh2dHandle(meshes.add(poly)),
+                material: materials.add(Color::BLACK),
+                transform: Transform {
+                    translation: Vec3 {
+                        x: 0.0,
+                        y: -720.0,
+                        z: 0.0,
+                    },
+                    ..default()
                 },
                 ..default()
             },
-            ..default()
-        },
-        Wall {},
-    ));
-    writer.send(ResetEvent {});
+            Wall {},
+        ));
+    }
 }
 
 fn reset_players(
@@ -164,17 +174,21 @@ fn reset_players(
     asset_server: Res<AssetServer>,
     query: Query<(Entity, &Player)>,
     mut reader: EventReader<ResetEvent>,
+    mut redraw_writer: EventWriter<RedrawTerrainEvent>,
 ) {
     if reader.read().next().is_some() {
-        state.wind = random_wind();
+        let (wind, poly_rand) = next_random();
+        state.wind = wind;
+        state.rand = poly_rand;
         state.active_player = 0;
+
         let mut previous_player_states = Vec::<(u32, HashMap<BulletType, BulletCount>)>::new();
         for (entity, player) in query.iter() {
             previous_player_states.push((player.money, player.inventory.clone()));
             commands.entity(entity).despawn_recursive();
         }
         for i in 0..state.player_count {
-            let x_cord = -200.0 + i as f32 * 150.0;
+            let x_cord = -700.0 * state.rand + i as f32 * state.rand * 1050.0;
             commands.spawn(TankBundle {
                 sprite: SpriteBundle {
                     texture: asset_server.load("greentank_rechts.png"),
@@ -186,7 +200,7 @@ fn reset_players(
                         },
                         translation: Vec3 {
                             x: x_cord,
-                            y: polynomial(x_cord as i32, 0.5) - 675.0,
+                            y: polynomial(x_cord as i32, &state) - 695.0,
                             z: 1.0,
                         },
                         ..default()
@@ -197,6 +211,7 @@ fn reset_players(
                 player: Player::from_previous_or_initial(i, previous_player_states.get(i as usize)),
             });
         }
+        redraw_writer.send(RedrawTerrainEvent {});
     }
 }
 
@@ -273,14 +288,18 @@ fn bullet_collision(
     mut query: Query<(Entity, &mut Player, &Tank, &Transform)>,
     mut writer: EventWriter<EndTurnEvent>,
     mut battle_writer: EventWriter<PlayerKillEvent>,
+    mut redraw_writer: EventWriter<RedrawTerrainEvent>,
 ) {
     for (bullet_entity, bullet, bullet_transform, bullet_type) in &bullets {
         let bullet_info = bullet_type.get_bullet_from_type();
+        let mut hit = false;
         for (_, _) in &walls {
             if bullet_transform.translation.y
-                < polynomial(bullet_transform.translation.x as i32, 0.5) - 700.0
+                < polynomial(bullet_transform.translation.x as i32, &state) - 720.0
             {
+                hit = true;
                 commands.entity(bullet_entity).despawn_recursive();
+                // TODO handle this in a separate function -> add damage there
                 (bullet_info.groundhitfn)(&mut commands, &mut state, &mut writer);
             }
         }
@@ -293,6 +312,7 @@ fn bullet_collision(
                 && bullet_transform.translation.x
                     >= tank_transform.translation.x - (tank.scale.x / 2.0)
             {
+                hit = true;
                 player.health -= bullet.damage as i32;
                 if player.health < 0 {
                     battle_writer.send(PlayerKillEvent {
@@ -304,6 +324,9 @@ fn bullet_collision(
                 (bullet_info.playerhitfn)(&mut commands, &mut state, &mut writer);
                 commands.entity(bullet_entity).despawn_recursive();
             }
+        }
+        if hit {
+            redraw_writer.send(RedrawTerrainEvent {});
         }
     }
 }
@@ -333,7 +356,8 @@ fn swap_player(
         state.firing = false;
     }
     for _ in reader.read() {
-        state.wind = random_wind();
+        let (wind, _) = next_random();
+        state.wind = wind;
         let (_, player, _, _, _) =
             if let Some(props) = get_current_player_props(state.active_player, &mut players) {
                 props

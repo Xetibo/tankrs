@@ -84,6 +84,15 @@ impl BulletType {
         }
     }
 
+    pub fn get_radius(&self) -> u32 {
+        // TODO get this from somewhere else
+        match self {
+            BulletType::RegularBullet => 10,
+            BulletType::FireBullet => 20,
+            BulletType::Nuke => 150,
+        }
+    }
+
     pub fn init_bullets() -> HashMap<BulletType, BulletCount> {
         let mut map = HashMap::new();
         map.insert(BulletType::RegularBullet, BulletCount::Unlimited);
@@ -163,6 +172,11 @@ pub struct Bullet {
 
 pub const REGULAR_HIT: CollisionFn =
     |_: &mut Commands, state: &mut ResMut<GameState>, writer: &mut EventWriter<EndTurnEvent>| {
+        // TODO make use of bullettype
+        for i in 0..10 {
+            // TODO use index
+            state.damage[1920 + i] = i as f32 * 10.0;
+        }
         state.firing = false;
         writer.send(EndTurnEvent {});
     };

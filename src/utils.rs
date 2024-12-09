@@ -1,3 +1,8 @@
+use crate::{
+    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
+    inputs::KeyMap,
+    tank::Tank,
+};
 use bevy::{
     asset::{AssetServer, Assets},
     prelude::{
@@ -6,12 +11,6 @@ use bevy::{
     },
     sprite::{ColorMaterial, Sprite},
     utils::HashMap,
-};
-
-use crate::{
-    bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
-    inputs::KeyMap,
-    tank::Tank,
 };
 
 #[derive(Event)]
@@ -28,6 +27,9 @@ pub struct EndTurnEvent {}
 
 #[derive(Event)]
 pub struct ResetEvent {}
+
+#[derive(Event)]
+pub struct RedrawTerrainEvent {}
 
 #[derive(Component)]
 pub struct Inventory {
@@ -51,6 +53,8 @@ pub struct GameState {
     pub player_count_input: String,
     pub player_count_parse_error: bool,
     pub wind: f32,
+    pub rand: f32,
+    pub damage: [f32; (1920 * 2) + 1],
 }
 
 impl GameState {
@@ -65,6 +69,7 @@ impl GameState {
 
 impl Default for GameState {
     fn default() -> Self {
+        let (wind, rand) = next_random();
         GameState {
             firing: false,
             mode: GameMode::StartMenu,
@@ -72,7 +77,9 @@ impl Default for GameState {
             player_count_input: "2".into(),
             player_count: 2,
             player_count_parse_error: false,
-            wind: random_wind(),
+            wind,
+            rand,
+            damage: [0.0; (1920 * 2) + 1],
         }
     }
 }
@@ -143,13 +150,14 @@ impl Player {
     }
 }
 
-pub fn polynomial(x: i32, rand: f32) -> f32 {
+pub fn polynomial(x: i32, state: &GameState) -> f32 {
+    let damage_index = (x + 1920) as usize;
+    let damage = state.damage[damage_index];
+
     let x = x as f32;
-    //(f32::consts::E - x) * (x * f32::consts::E) *
-    //(rand * power(x, 4)) + (rand * power(x, 3)) - (rand * power(x, 2)) - (rand * x)
-    //power(x, 5) - power(x, 4) - (5.0 * power(x, 3)) + (3.0 * power(x, 2)) + (4.0 * x) - 3.0
-    //((rand * x) * 0.00005).cos() * 1000.0 * rand
-    (x * rand * 0.005).cos() * 100. * rand + 100.0
+    let rand = state.rand;
+    let f3 = (x * rand * 0.005).cos();
+    ((rand * 800. * f3) - damage).max(10.0)
 }
 
 pub fn power(_num: f32, pow: i32) -> f32 {
@@ -184,6 +192,9 @@ pub fn get_current_player_props<'a>(
     }
 }
 
-pub fn random_wind() -> f32 {
-    rand::random::<f32>().clamp(-0.3, 0.3)
+pub fn next_random() -> (f32, f32) {
+    (
+        rand::random::<f32>().clamp(-0.3, 0.3),
+        rand::random::<f32>().clamp(0.5, 1.5),
+    )
 }
