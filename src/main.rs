@@ -1,7 +1,6 @@
 use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
     utils::HashMap,
 };
 use core::f32;
@@ -147,19 +146,16 @@ fn redraw_terrain(
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 
         //poly.insert_indices(Indices::U32(indices));
-        commands.spawn(Camera2dBundle::default());
+        commands.spawn(Camera2d);
 
         commands.spawn((
-            MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(poly)),
-                material: materials.add(Color::BLACK),
-                transform: Transform {
-                    translation: Vec3 {
-                        x: 0.0,
-                        y: -720.0,
-                        z: 0.0,
-                    },
-                    ..default()
+            Mesh2d(meshes.add(poly)),
+            MeshMaterial2d(materials.add(Color::BLACK)),
+            Transform {
+                translation: Vec3 {
+                    x: 0.0,
+                    y: -720.0,
+                    z: 0.0,
                 },
                 ..default()
             },
@@ -189,27 +185,32 @@ fn reset_players(
         }
         for i in 0..state.player_count {
             let x_cord = -700.0 * state.rand + i as f32 * state.rand * 1050.0;
-            commands.spawn(TankBundle {
-                sprite: SpriteBundle {
-                    texture: asset_server.load("greentank_rechts.png"),
-                    transform: Transform {
-                        scale: Vec3 {
-                            x: 0.3333,
-                            y: 0.3333,
-                            z: 1.0,
-                        },
-                        translation: Vec3 {
-                            x: x_cord,
-                            y: polynomial(x_cord as i32, &state) - 695.0,
-                            z: 1.0,
-                        },
+            commands.spawn((
+                TankBundle {
+                    sprite: Sprite {
+                        image: asset_server.load("greentank_rechts.png"),
                         ..default()
+                    },
+                    tank: Tank::default(),
+                    player: Player::from_previous_or_initial(
+                        i,
+                        previous_player_states.get(i as usize),
+                    ),
+                },
+                Transform {
+                    scale: Vec3 {
+                        x: 0.3333,
+                        y: 0.3333,
+                        z: 1.0,
+                    },
+                    translation: Vec3 {
+                        x: x_cord,
+                        y: polynomial(x_cord as i32, &state) - 695.0,
+                        z: 1.0,
                     },
                     ..default()
                 },
-                tank: Tank::default(),
-                player: Player::from_previous_or_initial(i, previous_player_states.get(i as usize)),
-            });
+            ));
         }
         redraw_writer.send(RedrawTerrainEvent {});
     }
@@ -220,7 +221,7 @@ fn move_bullets(
     state: Res<GameState>,
     mut query: Query<(&mut BulletEntity, &mut Transform)>,
 ) {
-    let delta = time.delta_seconds();
+    let delta = time.delta_secs();
     for (mut bullet, mut transform) in &mut query {
         let wind = state.wind;
 

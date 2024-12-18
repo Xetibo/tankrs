@@ -111,15 +111,15 @@ pub fn view_shop_ui(
                 ]
                 .padding(5),
                 row![container(bullet_container)]
-                    .align_items(Alignment::Center)
+                    .align_y(Alignment::Center)
                     .padding(5)
             ])
             .padding(10)
-            .width(5000)
-            .height(5000)
-            .center_x()
-            .center_y()
-            .style(get_custom_container_style()),
+            //.width(5000)
+            //.height(5000)
+            .center_x(5000)
+            .center_y(5000)
+            .style(get_custom_container_style),
         )
     }
 }

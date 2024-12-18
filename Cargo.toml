@@ -10,8 +10,8 @@ required-features = ["bevy_xpbd_3d"]
 
 [dependencies]
 #oxiced = "0.1.0"
-#oxiced = { branch = "wip", git = "https://github.com/Xetibo/oxiced.git" }
-bevy = { version = "0.14.2", features = ["wayland"] }
+oxiced = { branch = "new-try", git = "https://github.com/Xetibo/oxiced.git" }
+bevy = { version = "0.15", features = ["wayland"] }
 rand = "0.8.5"
-bevy_iced = { branch = "bevy-0.14", git = "https://github.com/tzemanovic/bevy_iced.git" }
+bevy_iced = { branch = "master", git = "https://github.com/Azorlogh/bevy_iced.git" }
 enum-iterator = "2.1.0"

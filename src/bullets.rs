@@ -5,9 +5,10 @@ use bevy::{
     color::Color,
     math::{Vec2, Vec3},
     prelude::{
-        default, Bundle, Circle, Commands, Component, EventWriter, Mesh, Res, ResMut, Transform,
+        default, Bundle, Circle, Commands, Component, EventWriter, Mesh, Mesh2d, Res, ResMut,
+        Transform,
     },
-    sprite::{ColorMaterial, MaterialMesh2dBundle, Mesh2dHandle, SpriteBundle},
+    sprite::{ColorMaterial, MeshMaterial2d, Sprite},
     utils::HashMap,
 };
 use enum_iterator::Sequence;
@@ -137,13 +138,14 @@ pub struct BulletEntity {
 #[derive(Bundle)]
 pub struct BulletMeshBundle {
     pub bullet: BulletEntity,
-    pub mesh_bundle: MaterialMesh2dBundle<ColorMaterial>,
+    pub mesh: Mesh2d,
+    pub material: MeshMaterial2d<ColorMaterial>,
 }
 
 #[derive(Bundle)]
 pub struct BulletSpriteBundle {
     pub bullet: BulletEntity,
-    pub sprite_bundle: SpriteBundle,
+    pub sprite_bundle: Sprite,
 }
 
 pub struct BulletInfo<'a> {
@@ -209,20 +211,17 @@ pub const NORMAL_BULLET_FN: BulletFn = |commands: &mut Commands,
                 radius: 10,
                 owner: info.owner,
             },
-            mesh_bundle: MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(Circle { radius: 1.0 })),
-                material: materials.add(Color::BLACK),
-                transform: Transform {
-                    translation: offset_origin,
-                    scale: Vec3 {
-                        x: 10.0,
-                        y: 10.0,
-                        z: 1.0,
-                    },
-                    ..default()
-                },
-                ..default()
+            mesh: Mesh2d(meshes.add(Circle { radius: 1.0 })),
+            material: MeshMaterial2d(materials.add(Color::BLACK)),
+        },
+        Transform {
+            translation: offset_origin,
+            scale: Vec3 {
+                x: 10.0,
+                y: 10.0,
+                z: 1.0,
             },
+            ..default()
         },
         BulletType::RegularBullet,
     ));
@@ -264,20 +263,17 @@ pub const FIRE_BULLET_FN: BulletFn = |commands: &mut Commands,
                 radius: 10,
                 owner: info.owner,
             },
-            mesh_bundle: MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(Circle { radius: 2.0 })),
-                material: materials.add(Color::srgb(1.0, 0.0, 0.0)),
-                transform: Transform {
-                    translation: offset_origin,
-                    scale: Vec3 {
-                        x: 10.0,
-                        y: 10.0,
-                        z: 1.0,
-                    },
-                    ..default()
-                },
-                ..default()
+            mesh: Mesh2d(meshes.add(Circle { radius: 2.0 })),
+            material: MeshMaterial2d(materials.add(Color::srgb(1.0, 0.0, 0.0))),
+        },
+        Transform {
+            translation: offset_origin,
+            scale: Vec3 {
+                x: 10.0,
+                y: 10.0,
+                z: 1.0,
             },
+            ..default()
         },
         BulletType::FireBullet,
     ));
@@ -312,14 +308,15 @@ pub const NUKE_FN: BulletFn = |commands: &mut Commands,
                 radius: 10,
                 owner: info.owner,
             },
-            sprite_bundle: SpriteBundle {
-                texture: asset_server.load("../assets/nuke.gif"),
-                transform: Transform {
-                    translation: offset_origin,
-                    ..default()
-                },
+            sprite_bundle: Sprite {
+                image: asset_server.load("../assets/nuke.gif"),
+                // TODO transform?
                 ..default()
             },
+        },
+        Transform {
+            translation: offset_origin,
+            ..default()
         },
         BulletType::Nuke,
     ));

@@ -121,7 +121,7 @@ pub fn update_battle_ui<'a>(
             }
             return;
         };
-    let delta = time.delta_seconds();
+    let delta = time.delta_secs();
     for msg in msgs {
         match msg {
             BattleMessage::Reset => {

@@ -1,11 +1,14 @@
 use bevy::prelude::{EventWriter, Res, ResMut};
 use bevy_iced::{
     iced::{
+        self,
         alignment::{Horizontal, Vertical},
         widget::{button, column, container, row, text, text_input},
+        Theme,
     },
     IcedContext,
 };
+use oxiced::widgets::oxi_button::{self, ButtonVariant};
 
 use crate::{
     utils::{GameMode, GameState, ResetEvent},
@@ -58,6 +61,13 @@ pub fn update_startmenu_ui<'a>(
 pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>) {
     let wrap = UiMessage::StartMenuMessage;
     let title = text("Tankrs");
+    let new_start_button =
+        oxi_button::button::<UiMessage, Theme, iced::Renderer>("Start", ButtonVariant::Primary)
+            .on_press_maybe(if state.player_count_parse_error {
+                None
+            } else {
+                Some(UiMessage::SetSceneMessage(GameMode::Battle))
+            });
     let start_button = button("Start").on_press_maybe(if state.player_count_parse_error {
         None
     } else {
@@ -65,12 +75,18 @@ pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>)
     });
     let input = text_input("Player Count", &state.player_count_input)
         .on_input(|count| wrap(StartMenuMessage::ChoosePlayerCount(count)));
-    let content_container =
-        container(column![title, row![input, start_button].spacing(5)].spacing(10))
-            .width(300)
-            .height(600)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center);
+    let content_container = container(
+        column![
+            title,
+            new_start_button,
+            row![input, start_button].spacing(5)
+        ]
+        .spacing(10),
+    )
+    .width(300)
+    .height(600)
+    .align_x(Horizontal::Center)
+    .align_y(Vertical::Center);
     ctx.display(
         container(content_container)
             .padding(10)
@@ -78,6 +94,6 @@ pub fn view_startmenu_ui(state: Res<GameState>, mut ctx: IcedContext<UiMessage>)
             .height(5000)
             .align_x(Horizontal::Center)
             .align_y(Vertical::Center)
-            .style(get_custom_container_style()),
+            .style(get_custom_container_style),
     )
 }

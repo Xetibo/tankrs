@@ -3,7 +3,7 @@ use core::f32;
 use bevy::{
     math::{Vec2, Vec3},
     prelude::{Bundle, Component},
-    sprite::SpriteBundle,
+    sprite::Sprite,
 };
 
 use crate::utils::Player;
@@ -79,7 +79,7 @@ impl Default for Tank {
 
 #[derive(Bundle)]
 pub struct TankBundle {
-    pub sprite: SpriteBundle,
+    pub sprite: Sprite,
     pub player: Player,
     pub tank: Tank,
 }
