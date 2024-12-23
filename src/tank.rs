@@ -8,7 +8,7 @@ use bevy::{
 
 use crate::utils::Player;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Component)]
 pub struct Angle {
     value: f32,
 }
@@ -59,7 +59,21 @@ pub struct Tank {
     pub blocked_direction: Vec2,
     pub shooting_direction: Angle,
     pub shooting_velocity: Vec2,
+    pub fall_damage: u32,
     pub(crate) scale: bevy::prelude::Vec3,
+}
+
+impl Tank {
+    pub fn sprite_str_for_index(index: u32) -> &'static str {
+        match index {
+            0 => "tank_green.png",
+            1 => "tank_yellow.png",
+            2 => "tank_blue.png",
+            3 => "tank_red.png",
+            4 => "tank_purple.png",
+            _ => "lmao",
+        }
+    }
 }
 
 impl Default for Tank {
@@ -73,6 +87,7 @@ impl Default for Tank {
             },
             shooting_direction: Angle::default(),
             shooting_velocity: Vec2::new(1.0, 1.0),
+            fall_damage: 0,
         }
     }
 }
@@ -82,4 +97,13 @@ pub struct TankBundle {
     pub sprite: Sprite,
     pub player: Player,
     pub tank: Tank,
+}
+
+#[derive(Component)]
+pub struct Turret {}
+
+#[derive(Bundle)]
+pub struct TurretBundle {
+    pub sprite: Sprite,
+    pub turret: Turret,
 }

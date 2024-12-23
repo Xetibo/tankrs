@@ -43,10 +43,8 @@ pub fn update_startmenu_ui<'a>(
                 state.player_count_input = str_count.to_string();
                 let parsed_count = str_count.parse::<u32>();
                 if let Ok(count) = parsed_count {
-                    if count > 0 && count < 20
-                    /*TODO move this*/
-                    {
-                        state.player_count = count;
+                    if count > 0 && count < 5 {
+                        state.set_player_count = count;
                         state.player_count_parse_error = false;
                     } else {
                         state.player_count_parse_error = true;

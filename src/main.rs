@@ -2,18 +2,17 @@ use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
     utils::HashMap,
-    window::PresentMode,
 };
 use core::f32;
 use oxiced::theme::get_theme;
 
 use bevy_iced::{
-    iced::{self, Settings, Style},
+    iced::{self, Style},
     IcedContext, IcedPlugin, IcedSettings,
 };
 use bullets::{BulletCount, BulletEntity, BulletInfo, BulletType};
 use inputs::handle_keypress;
-use tank::{Tank, TankBundle};
+use tank::{Tank, TankBundle, Turret, TurretBundle};
 use ui::{
     battle::{update_battle_ui, view_battle_ui, BattleMessage},
     shop::{update_shop_ui, view_shop_ui, ShopMessage},
@@ -21,7 +20,7 @@ use ui::{
 };
 use utils::{
     get_current_player_props, next_random, polynomial, BulletHelpers, EndTurnEvent, FireEvent,
-    GameMode, GameState, Player, PlayerKillEvent, RedrawTerrainEvent, ResetEvent,
+    GameMode, GameState, Player, PlayerKillEvent, RedrawTerrainEvent, ResetEvent, TurretMoveEvent,
 };
 
 pub mod bullets;
@@ -43,6 +42,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(IcedPlugin::default())
         .add_event::<UiMessage>()
+        .add_event::<TurretMoveEvent>()
         .add_event::<FireEvent>()
         .add_event::<EndTurnEvent>()
         .add_event::<ResetEvent>()
@@ -50,9 +50,9 @@ fn main() {
         .add_event::<PlayerKillEvent>()
         .insert_resource(IcedSettings {
             scale_factor: None,
-            theme: iced::Theme::Ferra,
+            theme: get_theme(),
             style: Style {
-                text_color: iced::Color::from_rgb(0.0, 1.0, 1.0),
+                text_color: iced::Color::from_rgb(1.0, 0.0, 0.5),
             },
         })
         .insert_resource::<GameState>(GameState::default())
@@ -62,12 +62,14 @@ fn main() {
         .add_systems(Update, view_ui)
         .add_systems(Update, collision_handler)
         .add_systems(Update, bullet_collision_wrapper)
-        //.add_systems(Update, gravity)
+        .add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
+        .add_systems(Update, move_turret_handler)
         .add_systems(Update, swap_player)
         .add_systems(Update, handle_keypress)
         .add_systems(Update, kill_handler)
         .add_systems(Update, redraw_terrain)
+        .add_systems(Update, animate_sprite)
         .run();
 }
 
@@ -83,12 +85,15 @@ pub fn update_ui(
     meshes: ResMut<Assets<Mesh>>,
     query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut state: ResMut<GameState>,
-    reset_writer: EventWriter<ResetEvent>,
+    mut reset_writer: EventWriter<ResetEvent>,
     end_turn_writer: EventWriter<EndTurnEvent>,
+    turret_move_writer: EventWriter<TurretMoveEvent>,
     asset_server: Res<AssetServer>,
+    atlas: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let mut new_messages = messages.read().peekable();
     if let Some(UiMessage::SetSceneMessage(mode)) = new_messages.peek() {
+        reset_writer.send(ResetEvent {});
         state.mode = *mode;
     }
 
@@ -102,10 +107,42 @@ pub fn update_ui(
             query,
             state,
             reset_writer,
+            turret_move_writer,
             asset_server,
+            atlas,
         ),
         utils::GameMode::Shop => update_shop_ui(new_messages, state, query, end_turn_writer),
         utils::GameMode::StartMenu => update_startmenu_ui(new_messages, state, reset_writer),
+    }
+}
+
+#[derive(Component)]
+struct AnimationIndices {
+    first: usize,
+    last: usize,
+}
+
+#[derive(Component, Deref, DerefMut)]
+struct AnimationTimer(Timer);
+
+fn animate_sprite(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(Entity, &AnimationIndices, &mut AnimationTimer, &mut Sprite)>,
+) {
+    for (entity, indices, mut timer, mut sprite) in &mut query {
+        timer.tick(time.delta());
+
+        if timer.just_finished() {
+            if let Some(atlas) = &mut sprite.texture_atlas {
+                atlas.index = if atlas.index == indices.last {
+                    commands.entity(entity).despawn_recursive();
+                    indices.first
+                } else {
+                    atlas.index + 1
+                };
+            }
+        }
     }
 }
 
@@ -139,9 +176,9 @@ fn redraw_terrain(
             commands.entity(entity).despawn_recursive();
         }
         let mut vertices = Vec::new();
-        let mut i = -1920;
+        let mut i = -960;
         // TODO make this use a proper curve
-        for _ in -1920..1920 {
+        for _ in -960..960 {
             vertices.push([i as f32, 0.0, 0.0]);
             let two = [i as f32, polynomial(i, &state), 0.0];
             let three = [(i + 1) as f32, 0.0, 0.0];
@@ -164,7 +201,7 @@ fn redraw_terrain(
             Transform {
                 translation: Vec3 {
                     x: 0.0,
-                    y: -720.0,
+                    y: -540.0,
                     z: 0.0,
                 },
                 ..default()
@@ -187,40 +224,75 @@ fn reset_players(
         state.wind = wind;
         state.rand = poly_rand;
         state.active_player = 0;
+        state.damage = [0.0; 1921];
+        state.players.clear();
 
         let mut previous_player_states = Vec::<(u32, HashMap<BulletType, BulletCount>)>::new();
         for (entity, player) in query.iter() {
             previous_player_states.push((player.money, player.inventory.clone()));
             commands.entity(entity).despawn_recursive();
         }
-        for i in 0..state.player_count {
-            let x_cord = -700.0 * state.rand + i as f32 * state.rand * 1050.0;
-            commands.spawn((
-                TankBundle {
-                    sprite: Sprite {
-                        image: asset_server.load("greentank_rechts.png"),
-                        ..default()
-                    },
-                    tank: Tank::default(),
-                    player: Player::from_previous_or_initial(
-                        i,
-                        previous_player_states.get(i as usize),
-                    ),
+        for i in 0..state.set_player_count {
+            let tank = Tank::default();
+            let angle = tank.shooting_direction;
+            let x_cord = -520.0 * state.rand + i as f32 * state.rand * 300.0;
+            state.players.insert(i, true);
+            let transform = Transform {
+                scale: Vec3 {
+                    x: 0.5,
+                    y: 0.5,
+                    z: 1.0,
                 },
-                Transform {
-                    scale: Vec3 {
-                        x: 0.3333,
-                        y: 0.3333,
-                        z: 1.0,
-                    },
-                    translation: Vec3 {
-                        x: x_cord,
-                        y: polynomial(x_cord as i32, &state) - 695.0,
-                        z: 1.0,
-                    },
-                    ..default()
+                translation: Vec3 {
+                    x: x_cord,
+                    y: polynomial(x_cord as i32, &state) - 520.0,
+                    z: 1.0,
                 },
-            ));
+                ..default()
+            };
+
+            commands
+                .spawn((
+                    TankBundle {
+                        sprite: Sprite {
+                            image: asset_server.load(Tank::sprite_str_for_index(i)),
+                            ..default()
+                        },
+                        tank,
+                        player: Player::from_previous_or_initial(
+                            i,
+                            previous_player_states.get(i as usize),
+                        ),
+                    },
+                    transform,
+                ))
+                .with_children(|builder| {
+                    builder.spawn((
+                        TurretBundle {
+                            sprite: Sprite {
+                                image: asset_server.load("turret.png"),
+                                ..default()
+                            },
+                            turret: Turret {},
+                        },
+                        Transform {
+                            rotation: Quat::from_axis_angle(
+                                Vec3 {
+                                    x: 1.0,
+                                    y: 1.0,
+                                    z: 0.0,
+                                },
+                                angle.get(),
+                            ),
+                            translation: Vec3 {
+                                x: 0.0,
+                                y: 5.0,
+                                z: -1.0,
+                            },
+                            ..default()
+                        },
+                    ));
+                });
         }
         redraw_writer.send(RedrawTerrainEvent {});
     }
@@ -235,9 +307,6 @@ fn move_bullets(
     for (mut bullet, mut transform) in &mut query {
         let wind = state.wind;
 
-        // s0 + v0 + 0.5 * a * t * t
-        // calculate next positions
-
         // y
         transform.translation.y =
             transform.translation.y + bullet.velocity_shot.y + 0.5 * -5.0 * delta * delta;
@@ -246,47 +315,39 @@ fn move_bullets(
         // x
         transform.translation.x =
             transform.translation.x + bullet.velocity_shot.x + 0.5 * wind * delta * delta;
-        //if bullet.velocity_shot.x > 0.0 {
-        //    bullet.velocity_shot.x = (/*delta * wind +*/bullet.velocity_shot.x).clamp(0.0, 1000.0);
-        //} else {
-        //    bullet.velocity_shot.x = (/*delta * wind +*/bullet.velocity_shot.x).clamp(-1000.0, 0.0);
-        //}
-
-        // TODO do we want air resistance?
-        //if bullet.velocity_shot.x > 0.0 {
-        //transform.translation.x =
-        //    transform.translation.x + bullet.velocity_shot.x + 0.5 * wind * delta * delta;
-        //bullet.velocity_shot.x = (delta * wind + bullet.velocity_shot.x).clamp(0.0, 1000.0);
-        //} else {
-        //    transform.translation.x = transform.translation.x
-        //        + bullet.velocity_shot.x
-        //        + 0.5 * 0.1/*TODO implement wind*/ * delta * delta;
-        //    bullet.velocity_shot.x = (delta * 0.1 + bullet.velocity_shot.x).clamp(-1000.0, 0.0);
-        //}
     }
 }
 
-//fn gravity(mut query: Query<(&Tank, &mut Transform)>) {
-//    for (_, mut transform) in &mut query {
-//        transform.translation.y = (transform.translation.y - 9.81).clamp(
-//            polynomial(transform.translation.x as i32, 0.5) - 550.0,
-//            1000.0,
-//        );
-//    }
-//}
+fn gravity(state: Res<GameState>, mut query: Query<(&mut Tank, &mut Transform)>) {
+    for (mut tank, mut transform) in &mut query {
+        let min = polynomial(transform.translation.x as i32, &state) - 520.0;
+        let diff = transform.translation.y - min;
+        if diff > 20.0 {
+            tank.fall_damage = (diff - 20.0).clamp(0.0, 1000.0) as u32;
+        }
+        transform.translation.y = (transform.translation.y - 9.81).clamp(min, 1000.0);
+    }
+}
 
 fn collision_handler(
-    mut tanks: Query<&mut Tank, Without<Wall>>,
+    mut commands: Commands,
+    mut tanks: Query<(Entity, &mut Player, &mut Tank), Without<Wall>>,
     mut walls: Query<(&Wall, &mut Transform)>,
+    mut state: ResMut<GameState>,
 ) {
-    for mut tank in &mut tanks {
+    for (entity, mut player, mut tank) in &mut tanks {
         for (_, wall_transform) in &mut walls {
             let wall_y = wall_transform.translation.y;
             let wall_size = 5.0;
             let tank_size = 166.0 / 2.0;
             let min_y = wall_y + wall_size / 2.0 + tank_size;
-
             tank.blocked_direction.y = min_y;
+        }
+        player.health -= tank.fall_damage as i32;
+        if player.health < 0 {
+            commands.entity(entity).despawn_recursive();
+            let player_num = state.active_player;
+            state.players.insert(player_num, false);
         }
     }
 }
@@ -304,6 +365,7 @@ fn bullet_collision_wrapper(
     writer: EventWriter<EndTurnEvent>,
     battle_writer: EventWriter<PlayerKillEvent>,
     redraw_writer: EventWriter<RedrawTerrainEvent>,
+    atlas: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     bullet_collision(
         commands,
@@ -317,7 +379,32 @@ fn bullet_collision_wrapper(
         writer,
         battle_writer,
         redraw_writer,
+        atlas,
     )
+}
+
+fn move_turret_handler(
+    state: ResMut<GameState>,
+    mut reader: EventReader<TurretMoveEvent>,
+    mut turrets: Query<(&Parent, &Turret, &mut Transform)>,
+    mut query: Query<(Entity, &mut Player, &Tank)>,
+) {
+    for _ in reader.read() {
+        for (tank_entity, player, tank) in &mut query {
+            for (parent, _, mut turret_transform) in &mut turrets {
+                if parent.get() == tank_entity && player.player_number == state.active_player {
+                    turret_transform.rotation = Quat::from_axis_angle(
+                        Vec3 {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 1.0,
+                        },
+                        f32::consts::PI - tank.shooting_direction.get(),
+                    )
+                }
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -333,13 +420,14 @@ fn bullet_collision<'w>(
     mut writer: EventWriter<EndTurnEvent>,
     mut battle_writer: EventWriter<PlayerKillEvent>,
     mut redraw_writer: EventWriter<RedrawTerrainEvent>,
+    mut atlas: ResMut<'w, Assets<TextureAtlasLayout>>,
 ) {
     for (bullet_entity, bullet, bullet_transform, bullet_type) in &bullets {
         let bullet_info = bullet_type.get_bullet_from_type();
         let mut hit = false;
         for (_, _) in &walls {
             if bullet_transform.translation.y
-                < polynomial(bullet_transform.translation.x as i32, &state) - 720.0
+                < polynomial(bullet_transform.translation.x as i32, &state) - 540.0
             {
                 hit = true;
                 commands.entity(bullet_entity).despawn_recursive();
@@ -350,11 +438,14 @@ fn bullet_collision<'w>(
                     meshes: &mut meshes,
                     materials: &mut materials,
                     assetserver: &asset_server,
+                    atlas: &mut atlas,
                 };
                 let info = BulletInfo {
-                    velocity: &Vec2 { x: 1.0, y: 1.0 }, // TODO generate random velocity
+                    velocity: &Vec2 { x: 1.0, y: 1.0 },
                     origin: &bullet_transform.translation,
                     owner: bullet.owner,
+                    radius: bullet.radius,
+                    dmg: bullet.damage,
                 };
                 (bullet_info.groundhitfn)(&mut helpers, &mut writer, &info);
             }
@@ -372,9 +463,9 @@ fn bullet_collision<'w>(
                     >= tank_transform.translation.x - (tank.scale.x / 2.0)
             {
                 hit = true;
-                commands.entity(bullet_entity).despawn_recursive();
                 player.health -= bullet.damage as i32;
                 if player.health < 0 {
+                    state.players.insert(player.player_number, false);
                     battle_writer.send(PlayerKillEvent {
                         killer: bullet.owner,
                         killed: player.player_number,
@@ -387,16 +478,20 @@ fn bullet_collision<'w>(
                     meshes: &mut meshes,
                     materials: &mut materials,
                     assetserver: &asset_server,
+                    atlas: &mut atlas,
                 };
                 let info = BulletInfo {
-                    velocity: &Vec2 { x: 1.0, y: 1.0 }, // TODO get correct velocity
+                    velocity: &Vec2 { x: 1.0, y: 1.0 },
                     origin: &bullet_transform.translation,
                     owner: bullet.owner,
+                    radius: bullet.radius,
+                    dmg: bullet.damage,
                 };
                 (bullet_info.playerhitfn)(&mut helpers, &mut writer, &info);
             }
         }
         if hit {
+            commands.entity(bullet_entity).despawn_recursive();
             redraw_writer.send(RedrawTerrainEvent {});
         }
     }
@@ -419,26 +514,25 @@ fn swap_player(
     mut reader: EventReader<EndTurnEvent>,
     mut ui_writer: EventWriter<UiMessage>,
     mut reset_writer: EventWriter<ResetEvent>,
-    mut players: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
+    players: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
 ) {
+    let mut last = false;
     if state.mode == GameMode::Battle && players.iter().len() < 2 {
-        ui_writer.send(UiMessage::SetSceneMessage(GameMode::Shop));
         reset_writer.send(ResetEvent {});
+        ui_writer.send(UiMessage::SetSceneMessage(GameMode::Shop));
         state
             .active_bullets
             .store(0, std::sync::atomic::Ordering::Relaxed);
+        last = true;
     }
     for _ in reader.read() {
         let (wind, _) = next_random();
         state.wind = wind;
-        let (_, player, _, _, _) =
-            if let Some(props) = get_current_player_props(state.active_player, &mut players) {
-                props
-            } else {
-                return;
-            };
-        if state.mode == GameMode::Shop && player.player_number == state.player_count - 1 {
+        if state.mode == GameMode::Shop && state.active_player == state.set_player_count - 1 {
             ui_writer.send(UiMessage::SetSceneMessage(GameMode::Battle));
+        }
+        if last {
+            return;
         }
         state.increment_player();
     }

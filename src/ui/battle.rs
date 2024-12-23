@@ -5,7 +5,7 @@ use bevy::{
     asset::{AssetServer, Assets},
     math::Vec2,
     prelude::{Commands, Entity, EventWriter, Mesh, Query, Res, ResMut, Transform},
-    sprite::{ColorMaterial, Sprite},
+    sprite::{ColorMaterial, Sprite, TextureAtlasLayout},
     time::Time,
 };
 use bevy_iced::{
@@ -24,7 +24,10 @@ use oxiced::widgets::{
 use crate::{
     bullets::{BulletCount, BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, polynomial, BulletHelpers, GameState, Player, ResetEvent},
+    utils::{
+        get_current_player_props, polynomial, BulletHelpers, GameState, Player, ResetEvent,
+        TurretMoveEvent,
+    },
     UiMessage,
 };
 
@@ -102,7 +105,9 @@ pub fn update_battle_ui<'a, 'w, 's>(
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
     mut state: ResMut<'w, GameState>,
     mut reset_writer: EventWriter<ResetEvent>,
+    mut turret_move_writer: EventWriter<TurretMoveEvent>,
     asset_server: Res<'w, AssetServer>,
+    mut atlas: ResMut<'w, Assets<TextureAtlasLayout>>,
 ) {
     let msgs: Vec<&BattleMessage> = messages
         .filter_map(|val| match val {
@@ -143,15 +148,17 @@ pub fn update_battle_ui<'a, 'w, 's>(
             BattleMessage::MoveRight => {
                 transform.translation.x += player.drive(10) * delta;
                 transform.translation.y =
-                    polynomial(transform.translation.x as i32, &state) - 695.0;
+                    polynomial(transform.translation.x as i32, &state) - 520.0;
             }
             BattleMessage::MoveLeft => {
                 transform.translation.x -= player.drive(10) * delta;
                 transform.translation.y =
-                    polynomial(transform.translation.x as i32, &state) - 695.0;
+                    polynomial(transform.translation.x as i32, &state) - 520.0;
             }
             BattleMessage::Fire => {
                 let bullet_type = player.selected_bullet.bullet_type;
+                let radius = bullet_type.get_radius();
+                let dmg = bullet_type.get_dmg();
                 let count_type = *player
                     .inventory
                     .get(&bullet_type)
@@ -175,6 +182,8 @@ pub fn update_battle_ui<'a, 'w, 's>(
                     },
                     origin: &transform.translation,
                     owner: player.player_number,
+                    radius,
+                    dmg,
                 };
 
                 let mut helpers = BulletHelpers {
@@ -183,6 +192,7 @@ pub fn update_battle_ui<'a, 'w, 's>(
                     meshes: &mut meshes,
                     materials: &mut materials,
                     assetserver: &asset_server,
+                    atlas: &mut atlas,
                 };
                 (player.selected_bullet.firefn)(&mut helpers, &info);
             }
@@ -191,6 +201,7 @@ pub fn update_battle_ui<'a, 'w, 's>(
             }
             BattleMessage::SetAngle(angle) => {
                 tank.shooting_direction.set(*angle);
+                turret_move_writer.send(TurretMoveEvent {});
             }
             BattleMessage::SelectBullet(bullet) => {
                 let bullet_fn = bullet.get_bullet_from_type();

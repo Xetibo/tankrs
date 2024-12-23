@@ -1,19 +1,34 @@
-use std::{fmt::Display, hash::Hash, time::Duration};
+use std::{fmt::Display, hash::Hash};
 
 use bevy::{
     color::Color,
-    math::{Vec2, Vec3},
-    prelude::{
-        default, Bundle, Circle, Component, DespawnRecursiveExt, EventWriter, Mesh2d, Transform,
-    },
-    sprite::{ColorMaterial, MeshMaterial2d, Sprite, TextureAtlas},
+    math::{UVec2, Vec2, Vec3},
+    prelude::{default, Bundle, Circle, Component, EventWriter, Mesh2d, Transform},
+    sprite::{ColorMaterial, MeshMaterial2d, Sprite, TextureAtlas, TextureAtlasLayout},
     time::{Timer, TimerMode},
     utils::HashMap,
 };
 use enum_iterator::Sequence;
 use rand::random;
 
-use crate::utils::{BulletFn, BulletHelpers, CollisionFn, EndTurnEvent};
+use crate::{
+    utils::{BulletFn, BulletHelpers, CollisionFn, EndTurnEvent},
+    AnimationIndices, AnimationTimer,
+};
+
+pub fn set_dmg(helpers: &mut BulletHelpers, info: &BulletInfo) {
+    let radius = info.radius;
+    let lower = -((radius / 2) as i32);
+    let upper = (radius / 2) as i32;
+    for i in lower..upper {
+        let index = info.origin.x as i32 + i;
+        let offset_index = (960 + index) as usize;
+        let dmg = radius as f32 * 2.0;
+        if offset_index > 0 && offset_index < 1921 {
+            helpers.state.damage[offset_index] += dmg;
+        }
+    }
+}
 
 #[derive(Component)]
 pub struct BulletCollider {}
@@ -77,9 +92,9 @@ impl BulletType {
     pub fn get_cost(&self) -> u32 {
         match self {
             BulletType::RegularBullet => 0,
-            BulletType::FireBullet => 10,
-            BulletType::ClusterBullet => 10,
-            BulletType::Nuke => 100,
+            BulletType::FireBullet => 100,
+            BulletType::ClusterBullet => 500,
+            BulletType::Nuke => 2000,
         }
     }
 
@@ -87,25 +102,33 @@ impl BulletType {
         match self {
             BulletType::RegularBullet => u32::MAX,
             BulletType::FireBullet => 20,
-            BulletType::ClusterBullet => 20,
+            BulletType::ClusterBullet => 5,
             BulletType::Nuke => 3,
         }
     }
 
     pub fn get_radius(&self) -> u32 {
-        // TODO get this from somewhere else
         match self {
             BulletType::RegularBullet => 10,
-            BulletType::FireBullet => 20,
+            BulletType::FireBullet => 30,
             BulletType::ClusterBullet => 5,
             BulletType::Nuke => 150,
+        }
+    }
+
+    pub fn get_dmg(&self) -> u32 {
+        match self {
+            BulletType::RegularBullet => 20,
+            BulletType::FireBullet => 60,
+            BulletType::ClusterBullet => 5,
+            BulletType::Nuke => 200,
         }
     }
 
     pub fn init_bullets() -> HashMap<BulletType, BulletCount> {
         let mut map = HashMap::new();
         map.insert(BulletType::RegularBullet, BulletCount::Unlimited);
-        // TODO remove
+        // TODO LAST remove
         map.insert(BulletType::FireBullet, BulletCount::Count(10));
         map.insert(BulletType::ClusterBullet, BulletCount::Count(10));
         map.insert(BulletType::Nuke, BulletCount::Count(10));
@@ -161,14 +184,18 @@ pub struct BulletInfo<'a> {
     pub velocity: &'a Vec2,
     pub origin: &'a Vec3,
     pub owner: u32,
+    pub radius: u32,
+    pub dmg: u32,
 }
 
 impl<'a> BulletInfo<'a> {
-    pub fn new(velocity: &'a Vec2, origin: &'a Vec3, owner: u32) -> Self {
+    pub fn new(velocity: &'a Vec2, origin: &'a Vec3, owner: u32, radius: u32, dmg: u32) -> Self {
         Self {
             velocity,
             origin,
             owner,
+            radius,
+            dmg,
         }
     }
 }
@@ -183,15 +210,7 @@ pub struct Bullet {
 
 pub const REGULAR_HIT: CollisionFn =
     |helpers: &mut BulletHelpers, writer: &mut EventWriter<EndTurnEvent>, info: &BulletInfo| {
-        // TODO make use of bullettype
-        let radius = 10;
-        for i in -(radius / 2)..(radius / 2) {
-            // TODO use index
-            let index = info.origin.x as i32 + i;
-            let gg = (1920 + index) as usize;
-            let dmg = radius as f32 * 2.0;
-            helpers.state.damage[gg] += dmg;
-        }
+        set_dmg(helpers, info);
         let current = helpers
             .state
             .active_bullets
@@ -229,6 +248,8 @@ pub const CLUSTER_HIT: CollisionFn =
                 velocity: &new_velocity,
                 origin: info.origin,
                 owner: info.owner,
+                radius: info.radius,
+                dmg: info.dmg,
             };
             (NORMAL_BULLET_FN)(helpers, &overriden_info)
         }
@@ -237,48 +258,29 @@ pub const CLUSTER_HIT: CollisionFn =
 pub const NUKE_HIT: CollisionFn =
     |helpers: &mut BulletHelpers, writer: &mut EventWriter<EndTurnEvent>, info: &BulletInfo| {
         // TODO make use of bullettype
-        let radius = 200;
-        for i in -(radius / 2)..(radius / 2) {
-            // TODO use index
-            let index = info.origin.x as i32 + i;
-            let gg = (1920 + index) as usize;
-            let dmg = radius as f32 * 2.0;
-            helpers.state.damage[gg] += dmg;
-        }
-        //let texture_handle = helpers
-        //    .assetserver
-        //    .load("/assets/images/explosion_anim.png");
-        //let texture_atlas =
-        //    TextureAtlas::texture_rect(texture_handle, Vec2::new(32.0, 32.0), 3, 1, None, None);
-        //let texture_atlas_handle = texture_atlases.add(texture_atlas);
-        //commands.spawn(AudioBundle {
-        //    source: helpers.assetserver.load("/assets/sounds/explosion.wav"),
-        //    ..default()
-        //});
-        //// TODO aniimation
-        //commands.spawn((
-        //    SpriteSheetBundle {
-        //        sprite: TextureAtlas {
-        //            custom_size: Option::Some(Vec2 { x: 1.0, y: 1.0 }),
-        //            ..default()
-        //        },
-        //        texture_atlas: texture_atlas_handle,
-        //        transform: Transform {
-        //            translation: bullet_transform.translation,
-        //            scale: Vec3 {
-        //                x: 150.0,
-        //                y: 150.0,
-        //                z: 1.0,
-        //            },
-        //            ..default()
-        //        },
-        //        ..default()
-        //    },
-        //    AnimationTimer {
-        //        timer: Timer::from_seconds(0.05, TimerMode::Repeating),
-        //        counter: 2,
-        //    },
-        //));
+        set_dmg(helpers, info);
+
+        let texture = helpers.assetserver.load("nuke.png");
+        let layout = TextureAtlasLayout::from_grid(UVec2::splat(200), 3, 4, None, None);
+        let texture_atlas_layout = helpers.atlas.add(layout);
+        // Use only the subset of sprites in the sheet that make up the run animation
+        let animation_indices = AnimationIndices { first: 0, last: 9 };
+        helpers.commands.spawn((
+            Sprite::from_atlas_image(
+                texture,
+                TextureAtlas {
+                    layout: texture_atlas_layout,
+                    index: animation_indices.first,
+                },
+            ),
+            Transform {
+                translation: *info.origin,
+                ..Default::default()
+            },
+            animation_indices,
+            BulletType::Nuke,
+            AnimationTimer(Timer::from_seconds(0.01, TimerMode::Repeating)),
+        ));
 
         let current = helpers
             .state
@@ -317,8 +319,8 @@ pub const NORMAL_BULLET_FN: BulletFn = |helpers: &mut BulletHelpers, info: &Bull
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
                 // TODO implement
-                damage: 10,
-                radius: 10,
+                damage: info.dmg,
+                radius: info.radius,
                 owner: info.owner,
             },
             mesh: Mesh2d(helpers.meshes.add(Circle { radius: 1.0 })),
@@ -373,8 +375,8 @@ pub const FIRE_BULLET_FN: BulletFn = |helpers: &mut BulletHelpers,
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
                 // TODO implement
-                damage: 30,
-                radius: 20,
+                damage: info.dmg,
+                radius: info.radius,
                 owner: info.owner,
             },
             mesh: Mesh2d(helpers.meshes.add(Circle { radius: 2.0 })),
@@ -419,9 +421,8 @@ pub const CLUSTER_FN: BulletFn = |helpers: &mut BulletHelpers, info: &BulletInfo
             bullet: BulletEntity {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
-                // TODO implement
-                damage: 10,
-                radius: 10,
+                damage: info.dmg,
+                radius: info.radius,
                 owner: info.owner,
             },
             mesh: Mesh2d(helpers.meshes.add(Circle { radius: 2.0 })),
@@ -445,6 +446,15 @@ pub const CLUSTER_FN: BulletFn = |helpers: &mut BulletHelpers, info: &BulletInfo
 
 pub const NUKE: Bullet = Bullet {
     firefn: NUKE_FN,
+    playerhitfn: NUKE_HIT,
+    groundhitfn: NUKE_HIT,
+    bullet_type: BulletType::Nuke,
+};
+
+pub const NUKE_EXPLOSION: Bullet = Bullet {
+    // TODO empty fire func
+    firefn: NUKE_FN,
+    // TODO Add empty hit
     playerhitfn: NUKE_HIT,
     groundhitfn: NUKE_HIT,
     bullet_type: BulletType::Nuke,
@@ -477,8 +487,8 @@ pub const NUKE_FN: BulletFn = |helpers: &mut BulletHelpers, info: &BulletInfo| {
                 velocity_shot: *info.velocity,
                 velocity_gravity: Vec2 { x: 0.0, y: 9.81 },
                 // TODO implement
-                damage: 200,
-                radius: 200,
+                damage: info.dmg,
+                radius: info.radius,
                 owner: info.owner,
             },
             mesh: Mesh2d(helpers.meshes.add(Circle { radius: 3.0 })),

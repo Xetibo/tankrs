@@ -11,7 +11,7 @@ use bevy::{
         Commands, Component, Entity, Event, EventWriter, Mesh, Mut, Query, Res, ResMut, Resource,
         Transform,
     },
-    sprite::{ColorMaterial, Sprite},
+    sprite::{ColorMaterial, Sprite, TextureAtlasLayout},
     utils::HashMap,
 };
 
@@ -20,6 +20,9 @@ pub struct PlayerKillEvent {
     pub killer: u32,
     pub killed: u32,
 }
+
+#[derive(Event)]
+pub struct TurretMoveEvent {}
 
 #[derive(Event)]
 pub struct FireEvent {}
@@ -51,37 +54,62 @@ pub struct GameState {
     pub active_bullets: AtomicU32,
     pub mode: GameMode,
     pub active_player: u32,
-    pub player_count: u32,
+    pub players: HashMap<u32, bool>,
+    pub set_player_count: u32,
     pub player_count_input: String,
     pub player_count_parse_error: bool,
     pub wind: f32,
     pub rand: f32,
-    pub damage: [f32; (1920 * 2) + 1],
+    pub damage: [f32; 1921],
 }
 
 impl GameState {
-    pub fn increment_player(&mut self) {
-        if self.active_player == self.player_count - 1 {
-            self.active_player = 0;
+    fn wrap_increment(current: u32, max: u32) -> u32 {
+        if current == max {
+            0
         } else {
-            self.active_player += 1;
+            current + 1
         }
+    }
+
+    fn get_increment_number(current: u32, players: &HashMap<u32, bool>) -> u32 {
+        // wrap increment -> at max go back to 0
+        let next = GameState::wrap_increment(current, players.len() as u32 - 1);
+        // only choose alive players
+        let is_alive = players.get(&next).unwrap_or(&false);
+        if *is_alive {
+            next
+        } else {
+            Self::get_increment_number(
+                GameState::wrap_increment(next, players.len() as u32 - 1),
+                players,
+            )
+        }
+    }
+
+    pub fn increment_player(&mut self) {
+        let next = GameState::get_increment_number(self.active_player, &self.players);
+        self.active_player = next;
     }
 }
 
 impl Default for GameState {
     fn default() -> Self {
         let (wind, rand) = next_random();
+        let mut players = HashMap::new();
+        players.insert(0, true);
+        players.insert(1, true);
         GameState {
             active_bullets: AtomicU32::new(0),
             mode: GameMode::StartMenu,
             active_player: 0,
+            players,
+            set_player_count: 2,
             player_count_input: "2".into(),
-            player_count: 2,
             player_count_parse_error: false,
             wind,
             rand,
-            damage: [0.0; (1920 * 2) + 1],
+            damage: [0.0; 1921],
         }
     }
 }
@@ -96,6 +124,7 @@ where
     pub meshes: &'a mut ResMut<'w, Assets<Mesh>>,
     pub materials: &'a mut ResMut<'w, Assets<ColorMaterial>>,
     pub assetserver: &'a Res<'w, AssetServer>,
+    pub atlas: &'a mut ResMut<'w, Assets<TextureAtlasLayout>>,
 }
 
 pub type BulletFn = fn(&mut BulletHelpers, &BulletInfo);
@@ -158,13 +187,13 @@ impl Player {
 }
 
 pub fn polynomial(x: i32, state: &GameState) -> f32 {
-    let damage_index = (x + 1920) as usize;
+    let damage_index = (x + 960).clamp(0, 1920) as usize;
     let damage = state.damage[damage_index];
 
     let x = x as f32;
     let rand = state.rand;
     let f3 = (x * rand * 0.005).cos();
-    ((rand * 800. * f3) - damage).max(10.0)
+    ((rand * 700. * f3) - damage).max(10.0)
 }
 
 pub fn get_current_player_props<'a>(

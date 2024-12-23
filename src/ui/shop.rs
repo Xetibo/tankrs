@@ -88,7 +88,7 @@ pub fn view_shop_ui(
                     text(format!("Cost: {}, You currently have: {}", cost, count)),
                     oxi_button::button::<UiMessage, Theme, iced::Renderer>(
                         "buy",
-                        ButtonVariant::Primary
+                        ButtonVariant::Success
                     )
                     .on_press_maybe(
                         if cost <= player.money && *count < max_count {
@@ -104,7 +104,7 @@ pub fn view_shop_ui(
         };
         let battle_button = oxi_button::button::<UiMessage, Theme, iced::Renderer>(
             text("confirm"),
-            ButtonVariant::Primary,
+            ButtonVariant::Success,
         )
         .on_press(wrap(ShopMessage::EndTurn));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
