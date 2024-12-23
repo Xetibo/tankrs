@@ -4,12 +4,14 @@ use bevy::{
 };
 use bevy_iced::{
     iced::{
-        widget::{button, column, container, row, text, Container},
+        self,
+        widget::{column, container, row, text, Container},
         Alignment, Theme,
     },
     IcedContext, Renderer,
 };
 use enum_iterator::all;
+use oxiced::widgets::oxi_button::{self, ButtonVariant};
 
 use crate::{
     bullets::{BulletCount, BulletType},
@@ -84,17 +86,27 @@ pub fn view_shop_ui(
             if let BulletCount::Count(count) = current_count {
                 Some(container(column![
                     text(format!("Cost: {}, You currently have: {}", cost, count)),
-                    button("buy").on_press_maybe(if cost <= player.money && *count < max_count {
-                        Some(wrap(ShopMessage::BuyItem(*elem)))
-                    } else {
-                        None
-                    }),
+                    oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+                        "buy",
+                        ButtonVariant::Primary
+                    )
+                    .on_press_maybe(
+                        if cost <= player.money && *count < max_count {
+                            Some(wrap(ShopMessage::BuyItem(*elem)))
+                        } else {
+                            None
+                        }
+                    ),
                 ]))
             } else {
                 None
             }
         };
-        let battle_button = button(text("confirm")).on_press(wrap(ShopMessage::EndTurn));
+        let battle_button = oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+            text("confirm"),
+            ButtonVariant::Primary,
+        )
+        .on_press(wrap(ShopMessage::EndTurn));
         let bullets = all::<BulletType>().collect::<Vec<_>>();
         let bullet_items: Vec<Container<UiMessage, Theme, Renderer>> =
             bullets.iter().filter_map(item_container).collect();

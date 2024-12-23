@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicU32;
+
 use crate::{
     bullets::{Bullet, BulletCount, BulletInfo, BulletType, NORMAL_BULLET},
     inputs::KeyMap,
@@ -46,7 +48,7 @@ pub enum GameMode {
 // TODO move out to models
 #[derive(Resource)]
 pub struct GameState {
-    pub firing: bool,
+    pub active_bullets: AtomicU32,
     pub mode: GameMode,
     pub active_player: u32,
     pub player_count: u32,
@@ -71,7 +73,7 @@ impl Default for GameState {
     fn default() -> Self {
         let (wind, rand) = next_random();
         GameState {
-            firing: false,
+            active_bullets: AtomicU32::new(0),
             mode: GameMode::StartMenu,
             active_player: 0,
             player_count_input: "2".into(),
@@ -84,16 +86,21 @@ impl Default for GameState {
     }
 }
 
-pub type BulletFn = fn(
-    &mut Commands,
-    &mut ResMut<GameState>,
-    &mut ResMut<Assets<Mesh>>,
-    &mut ResMut<Assets<ColorMaterial>>,
-    &Res<AssetServer>,
-    &BulletInfo,
-);
+pub struct BulletHelpers<'w, 's, 'a>
+where
+    'w: 'a,
+    's: 'a,
+{
+    pub commands: &'a mut Commands<'w, 's>,
+    pub state: &'a mut GameState,
+    pub meshes: &'a mut ResMut<'w, Assets<Mesh>>,
+    pub materials: &'a mut ResMut<'w, Assets<ColorMaterial>>,
+    pub assetserver: &'a Res<'w, AssetServer>,
+}
 
-pub type CollisionFn = fn(&mut Commands, &mut ResMut<GameState>, &mut EventWriter<EndTurnEvent>);
+pub type BulletFn = fn(&mut BulletHelpers, &BulletInfo);
+
+pub type CollisionFn = fn(&mut BulletHelpers, &mut EventWriter<EndTurnEvent>, &BulletInfo);
 
 pub type BulletTypeAndFn = (BulletType, BulletFn);
 
@@ -158,14 +165,6 @@ pub fn polynomial(x: i32, state: &GameState) -> f32 {
     let rand = state.rand;
     let f3 = (x * rand * 0.005).cos();
     ((rand * 800. * f3) - damage).max(10.0)
-}
-
-pub fn power(_num: f32, pow: i32) -> f32 {
-    if pow > 0 {
-        power(_num, pow - 1)
-    } else {
-        1.0
-    }
 }
 
 pub fn get_current_player_props<'a>(

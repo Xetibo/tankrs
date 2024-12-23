@@ -10,16 +10,21 @@ use bevy::{
 };
 use bevy_iced::{
     iced::{
-        widget::{button, column, row, slider, text},
+        self,
+        widget::{column, row, text},
         Theme,
     },
     IcedContext, Renderer,
+};
+use oxiced::widgets::{
+    oxi_button::{self, ButtonVariant},
+    oxi_picklist, oxi_slider,
 };
 
 use crate::{
     bullets::{BulletCount, BulletInfo, BulletType},
     tank::Tank,
-    utils::{get_current_player_props, polynomial, GameState, Player, ResetEvent},
+    utils::{get_current_player_props, polynomial, BulletHelpers, GameState, Player, ResetEvent},
     UiMessage,
 };
 
@@ -48,7 +53,11 @@ pub fn view_battle_ui(
     player_query: Query<(&Player, &Tank)>,
     mut ctx: IcedContext<UiMessage>,
 ) {
-    let reset_button = button(text("Reset")).on_press(wrap(BattleMessage::Reset));
+    let reset_button = oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+        text("Reset"),
+        ButtonVariant::Primary,
+    )
+    .on_press(wrap(BattleMessage::Reset));
     let (mut current_player_opt, mut player_tank_opt) = (None, None);
     for (player, tank) in player_query.iter() {
         if state.active_player == player.player_number {
@@ -84,16 +93,16 @@ pub fn view_battle_ui(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn update_battle_ui<'a>(
+pub fn update_battle_ui<'a, 'w, 's>(
     messages: impl Iterator<Item = &'a UiMessage>,
     time: Res<Time>,
-    mut commands: Commands,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut commands: Commands<'w, 's>,
+    mut materials: ResMut<'w, Assets<ColorMaterial>>,
+    mut meshes: ResMut<'w, Assets<Mesh>>,
     mut query: Query<(Entity, &mut Player, &mut Tank, &mut Transform, &mut Sprite)>,
-    mut state: ResMut<GameState>,
+    mut state: ResMut<'w, GameState>,
     mut reset_writer: EventWriter<ResetEvent>,
-    asset_server: Res<AssetServer>,
+    asset_server: Res<'w, AssetServer>,
 ) {
     let msgs: Vec<&BattleMessage> = messages
         .filter_map(|val| match val {
@@ -101,7 +110,11 @@ pub fn update_battle_ui<'a>(
             _ => None,
         })
         .collect();
-    if state.firing {
+    if state
+        .active_bullets
+        .load(std::sync::atomic::Ordering::Relaxed)
+        > 0
+    {
         for msg in msgs {
             if let BattleMessage::Reset = msg {
                 reset_writer.send(ResetEvent {});
@@ -164,14 +177,14 @@ pub fn update_battle_ui<'a>(
                     owner: player.player_number,
                 };
 
-                (player.selected_bullet.firefn)(
-                    &mut commands,
-                    &mut state,
-                    &mut meshes,
-                    &mut materials,
-                    &asset_server,
-                    &info,
-                );
+                let mut helpers = BulletHelpers {
+                    commands: &mut commands,
+                    state: &mut state,
+                    meshes: &mut meshes,
+                    materials: &mut materials,
+                    assetserver: &asset_server,
+                };
+                (player.selected_bullet.firefn)(&mut helpers, &info);
             }
             BattleMessage::SetVelocity(velocity) => {
                 player.fire_velocity = *velocity;
@@ -196,23 +209,27 @@ fn wrap(msg: BattleMessage) -> UiMessage {
 fn bullet_picker(player: &Player) -> impl Into<IcedElement> {
     let options: Vec<BulletType> = player.inventory.keys().copied().collect();
     let selected = Some(player.selected_bullet.bullet_type);
-    column![bevy_iced::iced::widget::pick_list(
-        options,
-        selected,
-        |val| wrap(BattleMessage::SelectBullet(val))
-    )]
+    column![oxi_picklist::pick_list(options, selected, |val| wrap(
+        BattleMessage::SelectBullet(val)
+    ))]
 }
 
 fn fuel(player: &Player) -> impl Into<IcedElement> {
     row![
         // TODO make this work continuously
-        button(text("left"))
-            .on_press(wrap(BattleMessage::MoveLeft))
-            .padding(5),
+        oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+            text("left"),
+            ButtonVariant::Primary
+        )
+        .on_press(wrap(BattleMessage::MoveLeft))
+        .padding(5),
         text(format!("Fuel: {}", player.fuel)),
-        button(text("right"))
-            .on_press(wrap(BattleMessage::MoveRight))
-            .padding(5)
+        oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+            text("right"),
+            ButtonVariant::Primary
+        )
+        .on_press(wrap(BattleMessage::MoveRight))
+        .padding(5)
     ]
     .spacing(10)
 }
@@ -229,19 +246,23 @@ fn firing(player: &Player, tank: &Tank) -> impl Into<IcedElement> {
                 "Angle: {:.0}",
                 current_angle * 180.0 / f32::consts::PI
             )),
-            slider(angle_range, current_angle, |val| wrap(
+            oxi_slider::slider(angle_range, current_angle, |val| wrap(
                 BattleMessage::SetAngle(val)
             ))
             .step(0.01),
         ],
         column![
             text(format!("Velocity: {:.0}", current_velocity)),
-            slider(velocity_range, current_velocity, |val| wrap(
+            oxi_slider::slider(velocity_range, current_velocity, |val| wrap(
                 BattleMessage::SetVelocity(val)
             ))
             .step(0.1),
         ],
-        button(text("fire")).on_press(wrap(BattleMessage::Fire)),
+        oxi_button::button::<UiMessage, Theme, iced::Renderer>(
+            text("fire"),
+            ButtonVariant::Primary
+        )
+        .on_press(wrap(BattleMessage::Fire)),
     ]
     .spacing(10)
 }

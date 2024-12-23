@@ -49,7 +49,12 @@ pub fn handle_keypress(
     state: Res<GameState>,
     mut writer: EventWriter<UiMessage>,
 ) {
-    if state.firing || state.mode != GameMode::Battle {
+    if state
+        .active_bullets
+        .load(std::sync::atomic::Ordering::Relaxed)
+        > 0
+        || state.mode != GameMode::Battle
+    {
         return;
     }
     let (mut player_opt, mut tank_opt) = (None, None);

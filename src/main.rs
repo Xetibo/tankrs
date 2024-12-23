@@ -2,11 +2,16 @@ use bevy::{
     prelude::*,
     render::{mesh::PrimitiveTopology, render_asset::RenderAssetUsages},
     utils::HashMap,
+    window::PresentMode,
 };
 use core::f32;
+use oxiced::theme::get_theme;
 
-use bevy_iced::{IcedContext, IcedPlugin};
-use bullets::{BulletCount, BulletEntity, BulletType};
+use bevy_iced::{
+    iced::{self, Settings, Style},
+    IcedContext, IcedPlugin, IcedSettings,
+};
+use bullets::{BulletCount, BulletEntity, BulletInfo, BulletType};
 use inputs::handle_keypress;
 use tank::{Tank, TankBundle};
 use ui::{
@@ -15,8 +20,8 @@ use ui::{
     startmenu::{update_startmenu_ui, view_startmenu_ui, StartMenuMessage},
 };
 use utils::{
-    get_current_player_props, next_random, polynomial, EndTurnEvent, FireEvent, GameMode,
-    GameState, Player, PlayerKillEvent, RedrawTerrainEvent, ResetEvent,
+    get_current_player_props, next_random, polynomial, BulletHelpers, EndTurnEvent, FireEvent,
+    GameMode, GameState, Player, PlayerKillEvent, RedrawTerrainEvent, ResetEvent,
 };
 
 pub mod bullets;
@@ -43,13 +48,20 @@ fn main() {
         .add_event::<ResetEvent>()
         .add_event::<RedrawTerrainEvent>()
         .add_event::<PlayerKillEvent>()
+        .insert_resource(IcedSettings {
+            scale_factor: None,
+            theme: iced::Theme::Ferra,
+            style: Style {
+                text_color: iced::Color::from_rgb(0.0, 1.0, 1.0),
+            },
+        })
         .insert_resource::<GameState>(GameState::default())
         .add_systems(Startup, setup)
         .add_systems(Update, update_ui)
         .add_systems(Update, reset_players)
         .add_systems(Update, view_ui)
         .add_systems(Update, collision_handler)
-        .add_systems(Update, bullet_collision)
+        .add_systems(Update, bullet_collision_wrapper)
         //.add_systems(Update, gravity)
         .add_systems(Update, move_bullets)
         .add_systems(Update, swap_player)
@@ -109,7 +121,8 @@ pub fn view_ui(
     }
 }
 
-fn setup(mut writer: EventWriter<ResetEvent>) {
+fn setup(mut commands: Commands, mut writer: EventWriter<ResetEvent>) {
+    commands.spawn(Camera2d);
     writer.send(ResetEvent {});
 }
 
@@ -144,9 +157,6 @@ fn redraw_terrain(
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         )
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-
-        //poly.insert_indices(Indices::U32(indices));
-        commands.spawn(Camera2d);
 
         commands.spawn((
             Mesh2d(meshes.add(poly)),
@@ -281,9 +291,42 @@ fn collision_handler(
     }
 }
 
-fn bullet_collision(
-    mut commands: Commands,
-    mut state: ResMut<GameState>,
+#[allow(clippy::too_many_arguments)]
+fn bullet_collision_wrapper(
+    commands: Commands,
+    state: ResMut<GameState>,
+    materials: ResMut<Assets<ColorMaterial>>,
+    meshes: ResMut<Assets<Mesh>>,
+    asset_server: Res<AssetServer>,
+    bullets: Query<(Entity, &mut BulletEntity, &Transform, &BulletType)>,
+    walls: Query<(&Wall, &Transform)>,
+    query: Query<(Entity, &mut Player, &Tank, &Transform)>,
+    writer: EventWriter<EndTurnEvent>,
+    battle_writer: EventWriter<PlayerKillEvent>,
+    redraw_writer: EventWriter<RedrawTerrainEvent>,
+) {
+    bullet_collision(
+        commands,
+        state,
+        materials,
+        meshes,
+        asset_server,
+        bullets,
+        walls,
+        query,
+        writer,
+        battle_writer,
+        redraw_writer,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bullet_collision<'w>(
+    mut commands: Commands<'w, '_>,
+    mut state: ResMut<'w, GameState>,
+    mut materials: ResMut<'w, Assets<ColorMaterial>>,
+    mut meshes: ResMut<'w, Assets<Mesh>>,
+    asset_server: Res<'w, AssetServer>,
     bullets: Query<(Entity, &mut BulletEntity, &Transform, &BulletType)>,
     walls: Query<(&Wall, &Transform)>,
     mut query: Query<(Entity, &mut Player, &Tank, &Transform)>,
@@ -301,7 +344,22 @@ fn bullet_collision(
                 hit = true;
                 commands.entity(bullet_entity).despawn_recursive();
                 // TODO handle this in a separate function -> add damage there
-                (bullet_info.groundhitfn)(&mut commands, &mut state, &mut writer);
+                let mut helpers = BulletHelpers {
+                    commands: &mut commands,
+                    state: &mut state,
+                    meshes: &mut meshes,
+                    materials: &mut materials,
+                    assetserver: &asset_server,
+                };
+                let info = BulletInfo {
+                    velocity: &Vec2 { x: 1.0, y: 1.0 }, // TODO generate random velocity
+                    origin: &bullet_transform.translation,
+                    owner: bullet.owner,
+                };
+                (bullet_info.groundhitfn)(&mut helpers, &mut writer, &info);
+            }
+            if hit {
+                break;
             }
         }
         for (tank_entity, mut player, tank, tank_transform) in &mut query {
@@ -314,6 +372,7 @@ fn bullet_collision(
                     >= tank_transform.translation.x - (tank.scale.x / 2.0)
             {
                 hit = true;
+                commands.entity(bullet_entity).despawn_recursive();
                 player.health -= bullet.damage as i32;
                 if player.health < 0 {
                     battle_writer.send(PlayerKillEvent {
@@ -322,8 +381,19 @@ fn bullet_collision(
                     });
                     commands.entity(tank_entity).despawn_recursive();
                 }
-                (bullet_info.playerhitfn)(&mut commands, &mut state, &mut writer);
-                commands.entity(bullet_entity).despawn_recursive();
+                let mut helpers = BulletHelpers {
+                    commands: &mut commands,
+                    state: &mut state,
+                    meshes: &mut meshes,
+                    materials: &mut materials,
+                    assetserver: &asset_server,
+                };
+                let info = BulletInfo {
+                    velocity: &Vec2 { x: 1.0, y: 1.0 }, // TODO get correct velocity
+                    origin: &bullet_transform.translation,
+                    owner: bullet.owner,
+                };
+                (bullet_info.playerhitfn)(&mut helpers, &mut writer, &info);
             }
         }
         if hit {
@@ -354,7 +424,9 @@ fn swap_player(
     if state.mode == GameMode::Battle && players.iter().len() < 2 {
         ui_writer.send(UiMessage::SetSceneMessage(GameMode::Shop));
         reset_writer.send(ResetEvent {});
-        state.firing = false;
+        state
+            .active_bullets
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
     for _ in reader.read() {
         let (wind, _) = next_random();
